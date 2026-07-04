@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" font-family="-apple-system, Segoe UI, Roboto, PingFang SC, sans-serif">
+  <defs>
+    <radialGradient id="glow" cx="78%" cy="0%" r="70%">
+      <stop offset="0%" stop-color="#33E6AC" stop-opacity="0.28"/>
+      <stop offset="60%" stop-color="#33E6AC" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="arc" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#34D399"/>
+      <stop offset="55%" stop-color="#F0B429"/>
+      <stop offset="100%" stop-color="#FF5B60"/>
+    </linearGradient>
+    <pattern id="dots" width="30" height="30" patternUnits="userSpaceOnUse">
+      <circle cx="1.4" cy="1.4" r="1.4" fill="#E9F1EC" fill-opacity="0.05"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="630" fill="#080C0A"/>
+  <rect width="1200" height="630" fill="url(#dots)"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+  <rect x="0" y="0" width="1200" height="6" fill="#33E6AC" opacity="0.9"/>
+
+  <!-- wordmark -->
+  <g transform="translate(80,92)">
+    <circle cx="16" cy="10" r="15" fill="none" stroke="#33E6AC" stroke-width="3"/>
+    <path d="M16 25 v10 a20 20 0 0 0 40 0 v-8" fill="none" stroke="#33E6AC" stroke-width="3"/>
+    <circle cx="56" cy="25" r="6" fill="#080C0A" stroke="#33E6AC" stroke-width="3"/>
+    <text x="82" y="30" font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="30" font-weight="700" fill="#E9F1EC">claudedoctor<tspan fill="#33E6AC">.</tspan></text>
+  </g>
+
+  <!-- headline -->
+  <text x="80" y="250" font-size="66" font-weight="800" letter-spacing="-2" fill="#E9F1EC">你的账号，<tspan fill="#33E6AC">暴露了多少？</tspan></text>
+  <text x="80" y="312" font-size="30" font-weight="600" fill="#93A69C">Claude Code 封禁风险体检 · 只算有因果的信号</text>
+
+  <!-- tags -->
+  <g font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="20" font-weight="600">
+    <g transform="translate(80,392)">
+      <rect x="0" y="0" width="150" height="42" rx="21" fill="none" stroke="#23302A"/>
+      <text x="24" y="28" fill="#34D399">● 只算因果</text>
+    </g>
+    <g transform="translate(246,392)">
+      <rect x="0" y="0" width="176" height="42" rx="21" fill="none" stroke="#23302A"/>
+      <text x="24" y="28" fill="#F0B429">● 字节级取证</text>
+    </g>
+    <g transform="translate(438,392)">
+      <rect x="0" y="0" width="150" height="42" rx="21" fill="none" stroke="#23302A"/>
+      <text x="24" y="28" fill="#93A69C">● 可复验修复</text>
+    </g>
+  </g>
+
+  <text x="80" y="556" font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="22" fill="#6E8078">开源 · MIT · 证据优先　　npm i -g claudedoctor</text>
+
+  <!-- gauge -->
+  <g transform="translate(898,196)">
+    <path d="M0,150 A150,150 0 0 1 300,150" fill="none" stroke="#1E2A24" stroke-width="26" stroke-linecap="round"/>
+    <path d="M0,150 A150,150 0 0 1 232,52" fill="none" stroke="url(#arc)" stroke-width="26" stroke-linecap="round"/>
+    <text x="150" y="150" font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="88" font-weight="700" fill="#E9F1EC" text-anchor="middle">63</text>
+    <text x="150" y="196" font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="22" fill="#93A69C" text-anchor="middle">/ 100 暴露度</text>
+  </g>
+</svg>

@@ -1,0 +1,22 @@
+{
+  "name": "claudedoctor",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A real anti-detection toolkit for Claude Code — detect, fix, re-check. Not a scoreboard.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev:cli": "pnpm -F @claudedoctor/cli dev",
+    "dev:web": "pnpm -F @claudedoctor/web dev",
+    "check": "pnpm -r typecheck"
+  },
+  "license": "MIT",
+  "author": "chaoyang",
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

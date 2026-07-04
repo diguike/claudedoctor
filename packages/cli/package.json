@@ -1,0 +1,24 @@
+{
+  "name": "@claudedoctor/cli",
+  "version": "0.0.0",
+  "description": "claudedoctor — Claude Doctor CLI: health-check your local Claude Code, prescribe fixes, and re-check.",
+  "type": "module",
+  "bin": {
+    "claudedoctor": "./bin/claudedoctor.mjs",
+    "cdoc": "./bin/claudedoctor.mjs"
+  },
+  "files": ["dist", "bin"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@claudedoctor/core": "workspace:*",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0"
+  },
+  "license": "MIT"
+}
