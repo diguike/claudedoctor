@@ -4,7 +4,7 @@
 > 只碰有因果的信号，每条结论带置信度与出处，诊断都配可复检的修复。不是又一个吓唬人的分数。
 
 ```bash
-npm i -g claudedoctor      # 命令：claudedoctor（短别名 cdoc）
+npm i -g @diguike/claudedoctor      # 命令：claudedoctor（短别名 cdoc）
 ```
 
 ## 用法
