@@ -1,24 +1,51 @@
 {
-  "name": "@claudedoctor/cli",
-  "version": "0.0.0",
-  "description": "claudedoctor — Claude Doctor CLI: health-check your local Claude Code, prescribe fixes, and re-check.",
+  "name": "claudedoctor",
+  "version": "0.1.0",
+  "description": "克劳德医生 · 给 Claude Code 做封禁风险体检的 CLI：检测 → 修复 → 复验。只算有因果的信号，每条带置信度与出处。",
   "type": "module",
   "bin": {
     "claudedoctor": "./bin/claudedoctor.mjs",
     "cdoc": "./bin/claudedoctor.mjs"
   },
-  "files": ["dist", "bin"],
+  "files": [
+    "dist",
+    "bin",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "ban-detection",
+    "anti-detection",
+    "cli",
+    "developer-tools"
+  ],
+  "homepage": "https://github.com/diguike/claudedoctor#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/diguike/claudedoctor.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/diguike/claudedoctor/issues"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "bundle": "rm -rf dist && esbuild src/cli.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/cli.js",
+    "prepack": "pnpm run bundle",
     "dev": "tsc -p tsconfig.json --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "dependencies": {
+  "devDependencies": {
     "@claudedoctor/core": "workspace:*",
+    "@types/node": "^20.14.0",
+    "esbuild": "^0.28.1",
     "picocolors": "^1.1.1"
   },
-  "devDependencies": {
-    "@types/node": "^20.14.0"
-  },
-  "license": "MIT"
+  "license": "MIT",
+  "author": "chaoyang"
 }

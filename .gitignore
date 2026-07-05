@@ -31,3 +31,6 @@ Thumbs.db
 
 # personal claude config (keep local)
 .claude/settings.json
+
+# npm pack artifacts
+*.tgz
