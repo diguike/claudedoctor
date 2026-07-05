@@ -33,6 +33,10 @@
   "bugs": {
     "url": "https://github.com/diguike/claudedoctor/issues"
   },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "bundle": "rm -rf dist && esbuild src/cli.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/cli.js",
