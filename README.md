@@ -1,56 +1,78 @@
-# Claude Doctor · 克劳德医生 🩺
+<div align="center">
 
-> A **real** health-check & anti-detection toolkit for Claude Code — detect → fix → re-check.
-> 给你的 Claude Code 和浏览器 Claude 做体检：诊断哪些信号会暴露 → 开药（可执行修复）→ 复诊。
+<img src="https://raw.githubusercontent.com/diguike/claudedoctor/main/packages/web/public/og.png" alt="Claude Doctor · 克劳德医生" width="760" />
+
+# 🩺 Claude Doctor · 克劳德医生
+
+**给 Claude Code 做封禁风险体检：检测 → 修复 → 复验。**
+只算有因果的信号，每条带置信度与出处，诊断都配可复检的修复。不是又一个吓唬人的分数。
+
+[![npm](https://img.shields.io/npm/v/@diguike/claudedoctor?logo=npm&color=CB3837)](https://www.npmjs.com/package/@diguike/claudedoctor)
+[![downloads](https://img.shields.io/npm/dm/@diguike/claudedoctor?color=0B9E71)](https://www.npmjs.com/package/@diguike/claudedoctor)
+[![node](https://img.shields.io/node/v/@diguike/claudedoctor?color=339933&logo=node.js&logoColor=white)](https://nodejs.org)
+[![license](https://img.shields.io/github/license/diguike/claudedoctor?color=blue)](./LICENSE)
+[![stars](https://img.shields.io/github/stars/diguike/claudedoctor?style=social)](https://github.com/diguike/claudedoctor)
 
 English | [中文](#中文)
 
-Unlike "are-you-a-China-user" scoreboards, Claude Doctor is a closed loop built on
-**byte-level evidence**: it only touches signals with a real causal link to Claude Code's
-behaviour, labels every verdict with a confidence level, and every diagnosis ships with an
-executable fix you can re-verify.
+</div>
 
-> **Status: M0–M2 working.** The `check → fix → verify` loop runs against your real
-> Claude Code install. Byte-level forensics ([`docs/mechanism.md`](./docs/mechanism.md))
-> **falsified** the rumored date-line steganography in Claude Code 2.1.201, so the CLI
-> focuses on the *actually causal* ban signals ([`docs/ban-signals.md`](./docs/ban-signals.md)):
-> subscription credentials leaving the official client (relays / third-party harnesses),
-> credential hygiene, and — opt-in — egress region.
+---
 
-## Usage
+## 📦 Install
 
 ```bash
-pnpm install && pnpm -r build            # build core + cli
-node packages/cli/bin/claudedoctor.mjs   # or link the bin; alias: cdoc
+npm i -g @diguike/claudedoctor      # command: claudedoctor  (alias: cdoc)
+```
 
-claudedoctor check          # 体检本地 Claude Code（默认）
-claudedoctor check --why    #   展开每条结论的出处与置信度
-claudedoctor check --net    #   联网体检出口 IP/地区（会把 IP 告知第三方）
-claudedoctor fix            # 开药：列出可执行修复（dry-run）
-claudedoctor verify         # 复诊：字节级复检日期行 + 复跑体检
-claudedoctor env            # 打印脱敏环境快照
+```bash
+claudedoctor                 # health-check your local Claude Code (table output)
+claudedoctor check --why     # expand every verdict with its source & confidence
+claudedoctor check --net     # + egress IP / region / VPN / proxy / datacenter (keyless)
+claudedoctor fix             # interactive checklist → apply fixes (--dry-run / --all / --revert)
+claudedoctor verify          # byte-level re-check of the date line + re-run
 ```
 
 Exit code: `0` healthy · `1` attention · `2` at-risk. Add `--json` for machine-readable output.
 
-## Monorepo layout
+## 🩺 What it does
+
+Unlike "are-you-a-China-user" scoreboards, Claude Doctor is a closed loop built on **byte-level
+evidence**: it only touches signals with a real causal link to Claude Code's behaviour, labels
+every verdict with a confidence level (`confirmed` / `reported` / `speculative`), and every
+diagnosis ships with an executable, re-verifiable fix.
+
+| | What it checks | Where |
+|---|---|---|
+| 🔑 | **Credentials & relays** — subscription OAuth leaving the official client via a relay (the one officially-confirmed ban cause) | CLI |
+| 🖥️ | **Client integrity** — official Claude Code vs a spoofed harness | CLI |
+| 🌐 | **Egress network & IP profile** — region, datacenter/proxy/VPN/Tor, IP purity (keyless via ipapi.is; optional ipdata) | CLI + web |
+| 🧩 | **Device & telemetry transparency** — local vs outbound identity, never abusing your credentials | CLI |
+| 🧭 | **Timezone profile factor** — byte-verified: the date-line marker existed, was official, and was removed in 2026-07 | CLI + web |
+
+The `fix` command presents an interactive checklist and applies the ones you pick to a **managed,
+fully-reversible block** in your shell profile (auto-backed-up; `fix --revert` removes it).
+
+## 🧱 Monorepo
 
 ```
 packages/
-├── core/   @claudedoctor/core   isomorphic detect / score / forensics (no I/O)
-├── cli/    @claudedoctor/cli     the `claudedoctor` (+`cdoc`) command
-└── web/    @claudedoctor/web     Astro static site (M3)
+├── core/   @claudedoctor/core   isomorphic detect / score / forensics (pure, no I/O)
+├── cli/    @diguike/claudedoctor the claudedoctor (+ cdoc) command
+└── web/    @claudedoctor/web     the landing page (live exposure gauge + IP profile)
 ```
 
-## Develop
+## 🛠️ Develop
 
 ```bash
 pnpm install
-pnpm -F @claudedoctor/cli dev
 pnpm -r build
+node packages/cli/bin/claudedoctor.mjs check
+pnpm -F @claudedoctor/web dev      # → http://localhost:4321
 ```
 
-See [`CLAUDE.md`](./CLAUDE.md) for the design rules, mechanism notes, and the M0–M4 roadmap.
+See [`CLAUDE.md`](./CLAUDE.md) for the design rules, [`docs/mechanism.md`](./docs/mechanism.md)
+(byte-level forensics ledger) and [`docs/ban-signals.md`](./docs/ban-signals.md) (ban-signal evidence).
 
 ---
 
@@ -59,15 +81,28 @@ See [`CLAUDE.md`](./CLAUDE.md) for the design rules, mechanism notes, and the M0
 ## 中文
 
 和"你是不是中国用户"那种打分工具不同，Claude Doctor 是一个以**字节级取证**为基础的闭环：
-只对与 Claude Code 行为**有真实因果**的信号动手，每条结论都标注置信度，且**每个诊断都配一条
-可执行、可复检的修复**。检测 → 开药 → 复诊。
+只对与 Claude Code 行为**有真实因果**的信号动手，每条结论都标注置信度（confirmed / reported /
+speculative），且**每个诊断都配一条可执行、可复检的修复**。检测 → 修复 → 复验。
 
-> ⚠️ **当前状态：脚手架。** 传闻中的检测机制**尚未证实**，开发从 **M0（取证先行）**开始，
-> 详见 [`CLAUDE.md`](./CLAUDE.md)。
+**安装：**
 
-命令行主名 `claudedoctor`，短别名 `cdoc`。核心是给**本地 Claude Code**（终端进程）体检；
-Web 端给**浏览器 Claude** 体检，作科普与引流。100% 本地运行，不上传任何环境数据。
+```bash
+npm i -g @diguike/claudedoctor      # 命令：claudedoctor（短别名 cdoc）
+```
+
+**用法：**
+
+```bash
+claudedoctor                 # 体检本地 Claude Code（默认，表格输出）
+claudedoctor check --net     # + 出口 IP / 地区 / VPN / 代理 / 机房（免 key）
+claudedoctor fix             # 交互勾选并应用修复（写入 shell profile 托管块，可 --revert 撤销）
+claudedoctor verify          # 字节级复检日期行 + 复跑体检
+```
+
+命令行给**本地 Claude Code**（终端进程）体检；Web 端给**浏览器 Claude** 体检，作科普与引流。
+**默认 100% 本地**，不上传任何环境数据；凭证只做分类，原文永不外泄。只帮真实用户降低误伤，
+不做指纹伪造 / 号池规避等 sketchy 功能。
 
 ## License
 
-MIT © chaoyang. 项目定位与设计原则见 [`CLAUDE.md`](./CLAUDE.md)。
+MIT © [递归客](https://github.com/diguike)。项目定位与设计原则见 [`CLAUDE.md`](./CLAUDE.md)。

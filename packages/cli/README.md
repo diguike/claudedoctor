@@ -1,7 +1,12 @@
-# claudedoctor · 克劳德医生 🩺
+# 🩺 claudedoctor · 克劳德医生
 
 > 给 Claude Code 做封禁风险体检的命令行工具：**检测 → 修复 → 复验**。
 > 只碰有因果的信号，每条结论带置信度与出处，诊断都配可复检的修复。不是又一个吓唬人的分数。
+
+[![npm](https://img.shields.io/npm/v/@diguike/claudedoctor?logo=npm&color=CB3837)](https://www.npmjs.com/package/@diguike/claudedoctor)
+[![downloads](https://img.shields.io/npm/dm/@diguike/claudedoctor?color=0B9E71)](https://www.npmjs.com/package/@diguike/claudedoctor)
+[![node](https://img.shields.io/node/v/@diguike/claudedoctor?color=339933&logo=node.js&logoColor=white)](https://nodejs.org)
+[![GitHub](https://img.shields.io/badge/GitHub-diguike%2Fclaudedoctor-24292e?logo=github)](https://github.com/diguike/claudedoctor)
 
 ```bash
 npm i -g @diguike/claudedoctor      # 命令：claudedoctor（短别名 cdoc）
@@ -35,4 +40,4 @@ claudedoctor env          # 打印脱敏环境快照
 
 证据优先、只碰有因果的信号、测对对象（CLI 测终端 / Web 测浏览器）、诊断必配可复检修复。只帮真实用户降低误伤，不做指纹伪造 / 号池规避等 sketchy 功能。
 
-MIT · [源码与文档](https://github.com/diguike/claudedoctor)
+MIT © [递归客](https://github.com/diguike) · [源码与文档](https://github.com/diguike/claudedoctor)
