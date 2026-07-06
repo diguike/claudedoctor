@@ -135,6 +135,18 @@ export interface Fix {
   /** shell commands the user can run; empty for advisory-only fixes */
   commands: string[];
   note?: string;
+  /**
+   * Structured, auto-applicable effect (env changes the CLI can write to a shell
+   * profile on the user's behalf). Present only for fixes safe to auto-apply;
+   * advisory fixes omit it. The CLI turns this into a managed shell-profile block.
+   */
+  apply?: { set?: Record<string, string>; unset?: string[] };
+  /**
+   * true = precautionary hygiene, NOT a confirmed causal improvement (e.g. the
+   * timezone override, dormant since the marker was removed). Surfaced distinctly
+   * so users know it won't move the risk score.
+   */
+  precautionary?: boolean;
 }
 
 /** One diagnosis line. */

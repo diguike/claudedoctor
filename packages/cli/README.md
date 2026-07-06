@@ -13,7 +13,7 @@ npm i -g @diguike/claudedoctor      # 命令：claudedoctor（短别名 cdoc）
 claudedoctor              # 体检本地 Claude Code（默认）
 claudedoctor check --why  # 展开每条结论的出处与说明
 claudedoctor check --net  # 联网体检出口 IP / 地区 / VPN / 代理 / 机房（免 key）
-claudedoctor fix          # 开药：列出可执行修复（默认 dry-run，不改文件）
+claudedoctor fix          # 开药：交互勾选并应用修复（--dry-run 只看 / --all 全应用 / --revert 撤销）
 claudedoctor verify       # 复诊：字节级复检 + 复跑体检
 claudedoctor env          # 打印脱敏环境快照
 ```

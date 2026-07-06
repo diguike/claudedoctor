@@ -3,11 +3,13 @@
  * Narrative: check（体检）→ fix（开药）→ verify（复诊）.
  */
 import pc from 'picocolors';
-import { diagnose, type DoctorInput } from '@claudedoctor/core';
+import * as p from '@clack/prompts';
+import { diagnose, type DoctorInput, type Finding } from '@claudedoctor/core';
 import { collect } from './collect.js';
 import { probeNetwork, activeProviderName } from './probe.js';
 import { renderDiagnosis } from './render.js';
 import { verifyDateLine } from './verify.js';
+import { applyToProfile, blockLines, detectProfile, revertProfile, sessionScript } from './apply.js';
 
 const BANNER = pc.bold('🩺  Claude Doctor') + pc.dim(' (claudedoctor / cdoc)');
 
@@ -15,15 +17,25 @@ interface Flags {
   why: boolean;
   net: boolean;
   json: boolean;
+  revert: boolean;
+  dryRun: boolean;
+  all: boolean;
+  session: boolean;
+  yes: boolean;
 }
 
 function parseFlags(args: string[]): { rest: string[]; flags: Flags } {
-  const flags: Flags = { why: false, net: false, json: false };
+  const flags: Flags = { why: false, net: false, json: false, revert: false, dryRun: false, all: false, session: false, yes: false };
   const rest: string[] = [];
   for (const a of args) {
     if (a === '--why' || a === '-w') flags.why = true;
     else if (a === '--net' || a === '--online') flags.net = true;
     else if (a === '--json') flags.json = true;
+    else if (a === '--revert' || a === '--undo') flags.revert = true;
+    else if (a === '--dry-run' || a === '-n') flags.dryRun = true;
+    else if (a === '--all') flags.all = true;
+    else if (a === '--session') flags.session = true;
+    else if (a === '--yes' || a === '-y') flags.yes = true;
     else rest.push(a);
   }
   return { rest, flags };
@@ -56,30 +68,113 @@ async function cmdCheck(flags: Flags): Promise<number> {
   return dx.summary.riskCount > 0 ? 2 : dx.summary.warnCount > 0 ? 1 : 0;
 }
 
+function printManual(manual: Finding[]): void {
+  if (manual.length === 0) return;
+  process.stdout.write(pc.dim('  需手动处理（无法安全自动应用）:\n'));
+  for (const f of manual) {
+    const mark = f.status === 'risk' ? pc.red('✗') : f.status === 'warn' ? pc.yellow('⚠') : pc.dim('ⓘ');
+    process.stdout.write(`  ${mark} ${pc.bold(f.title)} — ${f.fix!.title}\n`);
+    for (const cmd of f.fix!.commands) process.stdout.write(`      ${pc.green('$')} ${cmd}\n`);
+    if (f.fix!.note) process.stdout.write(pc.dim(`      ${f.fix!.note}\n`));
+  }
+  process.stdout.write('\n');
+}
+
 async function cmdFix(flags: Flags): Promise<number> {
+  // 撤销：移除 shell profile 里的托管块
+  if (flags.revert) {
+    const r = revertProfile();
+    process.stdout.write('\n' + BANNER + pc.bold(' · 撤销修复') + '\n\n');
+    if (r.removed) {
+      process.stdout.write(pc.green(`  ✓ 已移除 ${r.profile} 中的 claudedoctor 托管块`) + pc.dim(`（备份：${r.backup}）\n`));
+      process.stdout.write(pc.dim(`  重开终端或 \`source ${r.profile}\` 生效。\n\n`));
+    } else {
+      process.stdout.write(pc.dim(`  未发现 claudedoctor 托管块（${r.profile}），无需撤销。\n\n`));
+    }
+    return 0;
+  }
+
   const input = await buildInput(flags);
   const dx = diagnose(input);
-  const withFix = dx.findings.filter((f) => f.fix);
+  const auto = dx.findings.filter((f) => f.fix?.apply);
+  const manual = dx.findings.filter((f) => f.fix && !f.fix.apply);
+
   if (flags.json) {
-    process.stdout.write(JSON.stringify(withFix, null, 2) + '\n');
+    process.stdout.write(JSON.stringify(dx.findings.filter((f) => f.fix), null, 2) + '\n');
     return 0;
   }
-  process.stdout.write('\n' + BANNER + pc.bold(' · 开药（dry-run）') + '\n\n');
-  if (withFix.length === 0) {
-    process.stdout.write(pc.green('   ✓ 没有需要处理的项，当前配置健康。\n\n'));
+
+  // --session：只把可 eval 的行打到 stdout，供 `eval "$(claudedoctor fix --session)"`
+  if (flags.session) {
+    process.stdout.write(sessionScript(auto.map((f) => f.fix!)) + '\n');
     return 0;
   }
-  for (const f of withFix) {
-    const mark = f.status === 'risk' ? pc.red('✗') : pc.yellow('⚠');
-    process.stdout.write(`   ${mark} ${pc.bold(f.title)} — ${f.summary}\n`);
-    process.stdout.write(pc.cyan(`     药方: ${f.fix!.title}\n`));
-    for (const cmd of f.fix!.commands) process.stdout.write(`       ${pc.green('$')} ${cmd}\n`);
-    if (f.fix!.note) process.stdout.write(pc.dim(`       ${f.fix!.note}\n`));
-    process.stdout.write('\n');
+
+  process.stdout.write('\n' + BANNER + pc.bold(' · 开药') + '\n\n');
+  if (auto.length === 0 && manual.length === 0) {
+    process.stdout.write(pc.green('  ✓ 没有需要处理的项，当前配置健康。\n\n'));
+    return 0;
   }
-  process.stdout.write(
-    pc.dim('   以上为 dry-run，未改动任何文件。请自行执行需要的命令，然后 `claudedoctor verify` 复诊。\n\n'),
-  );
+  printManual(manual);
+  if (auto.length === 0) return 0;
+
+  const interactive = Boolean(process.stdout.isTTY && process.stdin.isTTY) && !flags.dryRun && !flags.all;
+
+  let chosen: Finding[];
+  if (flags.all) {
+    chosen = auto;
+  } else if (!interactive) {
+    // 预览模式（非 TTY 或 --dry-run）：只列，不改
+    process.stdout.write(pc.dim('  可自动应用的修复（预览，未改动）:\n'));
+    for (const f of auto) {
+      const p2 = f.fix!.precautionary ? pc.dim('（预防性·不提分）') : '';
+      process.stdout.write(`  ${pc.cyan('☐')} ${pc.bold(f.title)} — ${f.fix!.title} ${p2}\n`);
+      for (const l of blockLines([f.fix!])) process.stdout.write(pc.dim(`      + ${l}\n`));
+    }
+    process.stdout.write(
+      pc.dim('\n  交互勾选并应用：直接在终端跑 `claudedoctor fix`；或 `fix --all` 全部应用、`fix --session` 仅本会话。\n\n'),
+    );
+    return 0;
+  } else {
+    const picked = await p.multiselect({
+      message: '勾选要应用的修复（空格选中，回车确认）',
+      required: false,
+      options: auto.map((f, i) => ({
+        value: i,
+        label: `${f.title} — ${f.fix!.title}`,
+        hint: f.fix!.precautionary ? '预防性 · 不提升风险分' : '有因果 · 可提升健康度',
+      })),
+    });
+    if (p.isCancel(picked)) {
+      p.cancel('已取消，未改动任何文件。');
+      return 0;
+    }
+    chosen = (picked as number[]).map((i) => auto[i]!);
+  }
+
+  if (chosen.length === 0) {
+    process.stdout.write(pc.dim('  未选择任何项，未改动。\n\n'));
+    return 0;
+  }
+
+  const fixes = chosen.map((f) => f.fix!);
+  const profile = detectProfile();
+  const lines = blockLines(fixes);
+  process.stdout.write(pc.bold(`\n  将写入 ${profile}（会先自动备份）:\n`));
+  for (const l of lines) process.stdout.write(pc.green(`      ${l}\n`));
+
+  if (interactive && !flags.yes) {
+    const ok = await p.confirm({ message: '确认写入 shell profile？' });
+    if (p.isCancel(ok) || !ok) {
+      p.cancel('已取消，未改动任何文件。');
+      return 0;
+    }
+  }
+
+  const r = applyToProfile(fixes, profile);
+  process.stdout.write(pc.green(`\n  ✓ 已写入 ${r.profile}`) + pc.dim(`（备份：${r.backup ?? '无（原文件不存在）'}）\n`));
+  process.stdout.write(pc.dim(`  生效：重开终端，或 \`source ${r.profile}\`。之后 \`claudedoctor verify\` 复诊。\n`));
+  process.stdout.write(pc.dim(`  撤销：\`claudedoctor fix --revert\`。\n\n`));
   return 0;
 }
 
@@ -120,14 +215,15 @@ function printHelp(): void {
       '\n\n' +
       '  给本地 Claude Code 做体检 → 开药 → 复诊。只碰有因果的封号信号，每条带置信度与出处。\n\n' +
       pc.bold('  用法:\n') +
-      '    claudedoctor [check]   体检本地 Claude Code（默认）\n' +
-      '    claudedoctor fix       开药：列出可执行修复（dry-run）\n' +
+      '    claudedoctor [check]   体检本地 Claude Code（默认，表格输出）\n' +
+      '    claudedoctor fix       开药：交互勾选并应用修复（--dry-run 只看 / --all 全应用 / --revert 撤销）\n' +
       '    claudedoctor verify    复诊：字节级复检日期行 + 复跑体检\n' +
       '    claudedoctor env       打印脱敏环境快照\n\n' +
       pc.bold('  选项:\n') +
       '    --why      展开每条结论的出处与说明\n' +
       '    --net      联网体检出口 IP/地区（会把 IP 告知第三方）\n' +
-      '    --json     机器可读输出\n\n' +
+      '    --json     机器可读输出\n' +
+      '    fix --dry-run/--all/--session/--revert/--yes   修复的几种模式\n\n' +
       pc.dim('  证据账本: docs/ban-signals.md · docs/mechanism.md\n\n'),
   );
 }

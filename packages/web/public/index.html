@@ -139,6 +139,17 @@
   .gbreak .gb b { color: var(--hero-ink); margin-left: auto; font-weight: 600; }
   .gbreak .gb i { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
   .gsample { margin-top: 12px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); border-radius: 999px; padding: 3px 10px; }
+  .explain { margin-top: 14px; background: color-mix(in srgb, var(--hero-ink) 4%, transparent); border: 1px solid var(--hero-line); border-radius: 12px; }
+  .explain summary { cursor: pointer; padding: 13px 18px; font-size: 14px; font-weight: 600; color: var(--hero-ink); list-style: none; display: flex; align-items: center; gap: 8px; }
+  .explain summary::-webkit-details-marker { display: none; }
+  .explain summary::before { content: "＋"; font-family: var(--mono); color: var(--hero-accent); font-weight: 700; }
+  .explain[open] summary::before { content: "－"; }
+  .explain summary:hover { color: var(--hero-accent); }
+  .explain__body { padding: 0 18px 16px; font-size: 13.5px; color: var(--hero-soft); line-height: 1.65; }
+  .explain__body b { color: var(--hero-ink); font-weight: 600; }
+  .explain__body ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+  .explain__body .k { font-family: var(--mono); font-size: 12px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--hero-line); }
+  .explain__body .k.risk { color: var(--risk); } .explain__body .k.warn { color: var(--warn); } .explain__body .k.info { color: var(--info); }
 
   .signals { padding: 16px 20px; display: flex; flex-direction: column; }
   .signals__h { display: flex; align-items: center; gap: 10px; padding: 4px 2px 12px; border-bottom: 1px solid var(--hero-line); }
@@ -336,6 +347,10 @@
           <a class="btn on-hero" href="#cli" data-i18n="foot2.cta">↓ 深度体检</a>
         </div>
       </div>
+      <details class="explain">
+        <summary data-i18n="ex.sum">这个分数是怎么算出来的？</summary>
+        <div class="explain__body" data-i18n-html="ex.body"></div>
+      </details>
     </div>
   </div>
 </div>
@@ -490,6 +505,16 @@
       'hero.cta1':'安装命令行做深度体检','hero.cta2':'分享我的暴露度',
       'g.den':'/ 100 浏览器暴露度','g.scan':'扫描中','sig2.h':'检出信号',
       'ip.h':'IP 画像','ip.sub':'对 Cloudflare 风控最关键的维度 · 免 key 实时','ip.loading':'正在读取出口 IP 画像…',
+      'ex.sum':'这个分数是怎么算出来的？',
+      'ex.body':'<b>浏览器暴露度</b>是 0–100 的分数，衡量“从浏览器这一侧能看到的暴露/风控面”——<b>不是封号概率</b>。真正的封号向量（凭证、中转、客户端）浏览器看不到，要用命令行体检。'
+        +'<ul><li><span class="k info">0–30 低</span> 环境干净，未见明显暴露信号。</li>'
+        +'<li><span class="k warn">31–60 中</span> 有可改善项，多为访问/信誉类。</li>'
+        +'<li><span class="k risk">61–100 高</span> 有强暴露信号（如不支持地区）。</li></ul>'
+        +'分数由三部分累加，而且我们把它们<b>分开列出</b>，不混成一个吓唬人的数字：'
+        +'<ul><li><b>确认相关</b>：官方证实与封号/访问直接相关的信号（如出口在不支持地区），权重最高。</li>'
+        +'<li><b>访问/信誉</b>：机房 IP、VPN/代理、IP 滥用信誉——影响 claude.ai 登录会不会被 Cloudflare 拦，属“访问受阻”而非“账号被封”。</li>'
+        +'<li><b>画像因子</b>：如系统时区，历史上曾被用作标记、当前不编码，几乎不计分、仅提示。</li></ul>'
+        +'<b>IP 信誉（纯净度）</b>来自 ipapi.is 的 abuser_score：越满越干净，越低越可能被风控系统标记。',
       'foot2.note':'真正的封号向量（凭证 / 中转 / 客户端）浏览器看不到，需本地命令行。','foot2.cta':'↓ 深度体检',
       'detect.brow':'检测覆盖','detect.h2':'官方明禁、社区实测、红蓝推演，一次查清',
       'detect.p':'封号很少只有一个原因。Claude Doctor 把三类信号分开测、分层记：官方条款里写死的红线、社区反复报告的高风险行为、以及从风控与红蓝对抗角度可推断的暴露面。每条都标因果与置信度。',
@@ -526,6 +551,16 @@
       'hero.cta1':'Install the CLI for a deep exam','hero.cta2':'Share my exposure',
       'g.den':'/ 100 browser exposure','g.scan':'scanning','sig2.h':'Detected signals',
       'ip.h':'IP profile','ip.sub':'the dimensions Cloudflare cares about · keyless, live','ip.loading':'reading your egress IP profile…',
+      'ex.sum':'How is this score calculated?',
+      'ex.body':'<b>Browser exposure</b> is a 0–100 score for how exposed/flaggable you look <em>from the browser side</em> — it is <b>not a ban probability</b>. The real ban vectors (credentials, relays, client) are invisible to a browser; use the CLI for those.'
+        +'<ul><li><span class="k info">0–30 low</span> clean environment, no obvious exposure.</li>'
+        +'<li><span class="k warn">31–60 medium</span> improvable signals, mostly access/reputation.</li>'
+        +'<li><span class="k risk">61–100 high</span> strong exposure (e.g. unsupported region).</li></ul>'
+        +'The score sums three parts, and we <b>list them separately</b> instead of blending them into one scary number:'
+        +'<ul><li><b>Confirmed</b>: officially-confirmed, ban/access-relevant signals (e.g. an unsupported egress region) — highest weight.</li>'
+        +'<li><b>Access/reputation</b>: datacenter IP, VPN/proxy, IP abuse reputation — these affect whether claude.ai login is blocked by Cloudflare (access denied, not a ban).</li>'
+        +'<li><b>Profile factor</b>: e.g. system timezone — historically a marker input, not encoded now, near-zero weight, shown for info only.</li></ul>'
+        +'<b>IP reputation (purity)</b> comes from ipapi.is abuser_score: fuller = cleaner, lower = more likely flagged by risk systems.',
       'foot2.note':'The real ban vectors (credentials / relays / client) are invisible to a browser — that needs the local CLI.','foot2.cta':'↓ Deep exam',
       'detect.brow':'What it checks','detect.h2':'Official policy, community reports, red-team inference — one pass',
       'detect.p':'A ban rarely has a single cause. Claude Doctor separates three signal classes and tiers them: the red lines written into official policy, the high-risk behaviors the community keeps reporting, and the exposure surface you can infer from fraud-detection and red-team reasoning. Each is labeled with causality and confidence.',
@@ -630,11 +665,14 @@
     const gb = document.getElementById('gaugeBreak');
     if (state.split && state.done) {
       const S = state.split;
-      const seg = (color,label,val) => `<div class="gb"><i style="background:${color}"></i>${label}<b>+${val}</b></div>`;
+      const seg = (color,label,val,tip) => `<div class="gb" title="${tip}"><i style="background:${color}"></i>${label}<b>+${val}</b></div>`;
+      const T = lang==='zh'
+        ? {c:'官方证实、与封号/访问直接相关的信号',a:'机房/VPN/代理/信誉——影响登录是否被 Cloudflare 拦（访问受阻，非封号）',f:'如时区，曾为标记但当前不编码，几乎不计分'}
+        : {c:'officially-confirmed ban/access-relevant signals',a:'datacenter/VPN/proxy/reputation — affects Cloudflare login block (access, not ban)',f:'e.g. timezone; was a marker, not encoded now, near-zero weight'};
       gb.innerHTML =
-        seg('var(--risk)', lang==='zh'?'确认相关':'confirmed', S.causal) +
-        seg('var(--warn)', lang==='zh'?'访问/信誉':'access/rep', S.access) +
-        seg('var(--info)', lang==='zh'?'画像因子':'profile', S.factor) +
+        seg('var(--risk)', lang==='zh'?'确认相关':'confirmed', S.causal, T.c) +
+        seg('var(--warn)', lang==='zh'?'访问/信誉':'access/rep', S.access, T.a) +
+        seg('var(--info)', lang==='zh'?'画像因子':'profile', S.factor, T.f) +
         (state.sample ? `<div class="gsample">${lang==='zh'?'示例数据 · 预览用':'sample · preview'}</div>` : '');
     } else if (gb) gb.innerHTML = '';
   }

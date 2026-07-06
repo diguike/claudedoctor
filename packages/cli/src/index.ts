@@ -7,3 +7,4 @@ export { main } from './cli.js';
 export { collect } from './collect.js';
 export { probeNetwork } from './probe.js';
 export { verifyDateLine } from './verify.js';
+export { applyToProfile, revertProfile, detectProfile, blockLines } from './apply.js';

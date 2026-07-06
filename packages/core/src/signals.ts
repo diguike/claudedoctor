@@ -56,6 +56,9 @@ const baseUrl: Detector = (i) => {
             ? ['# 从 ~/.claude/settings.json 的 "env" 块移除 ANTHROPIC_BASE_URL']
             : ['unset ANTHROPIC_BASE_URL', '# 或从你的 shell profile 中删除该 export'],
         note: '若你确实需要自建网关做审计，请改用官方 API key（sk-ant-api*），而非订阅 OAuth。',
+        // Only auto-appliable when the var came from the shell env; a settings.json
+        // value is applied by Claude Code itself and a shell block can't override it.
+        apply: b.source === 'settings-json' ? undefined : { unset: ['ANTHROPIC_BASE_URL'] },
       },
     };
   }
@@ -114,6 +117,7 @@ const staleApiKey: Detector = (i) => {
         title: '移除多余的 ANTHROPIC_API_KEY，恢复订阅登录',
         commands: ['unset ANTHROPIC_API_KEY', '# 或从 shell profile / settings.json 的 env 块删除'],
         note: '仅当你本就想用订阅登录时才移除；若你是有意用 API key，忽略即可。',
+        apply: { unset: ['ANTHROPIC_API_KEY'] },
       },
     };
   }
@@ -148,6 +152,7 @@ const credentialKind: Detector = (i) => {
             'unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN  # sk-ant-oat* 可能落在其中任一个',
             'claude  # 用官方订阅登录，或设 ANTHROPIC_API_KEY=sk-ant-api…',
           ],
+          apply: { unset: ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN'] },
         },
       };
     case 'auth-token':
@@ -464,6 +469,23 @@ const timezone: Detector = (i) => {
       '我们在 2.1.201 字节级复检证实当前不再编码。因此不计入风险分，但它不是纯氛围——是可能回归的画像因子，' +
       '尤其"中国时区 + 非官方中转"的组合值得留意。',
     evidence: [SOURCES.mechanismLedger],
+    // Precautionary only: set TZ for the shell (not the OS clock). Offered when
+    // on a China timezone. Currently DORMANT (2.1.201 doesn't encode tz) — will
+    // NOT change the risk score; it's profile hygiene / insurance if it returns.
+    ...(cnTz
+      ? {
+          fix: {
+            kind: 'advisory' as const,
+            title: '为终端设置 TZ=Asia/Singapore（预防性，非确认因果）',
+            commands: ['export TZ=Asia/Singapore  # 仅影响终端程序，不改系统时钟'],
+            note:
+              '预防性画像卫生：当前版本不编码时区，这一项不会提升健康分；它只把终端进程看到的时区改成受支持地区，' +
+              '作为机制回归时的保险。注意会影响终端里所有程序的时钟显示，可随时一键撤销。',
+            apply: { set: { TZ: 'Asia/Singapore' } },
+            precautionary: true,
+          },
+        }
+      : {}),
   };
 };
 
