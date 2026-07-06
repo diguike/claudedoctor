@@ -13,6 +13,8 @@
 [![license](https://img.shields.io/github/license/diguike/claudedoctor?color=blue)](./LICENSE)
 [![stars](https://img.shields.io/github/stars/diguike/claudedoctor?style=social)](https://github.com/diguike/claudedoctor)
 
+**🔗 Live · 在线体验 → [claudedoctor.pages.dev](https://claudedoctor.pages.dev)**
+
 English | [中文](#中文)
 
 </div>
