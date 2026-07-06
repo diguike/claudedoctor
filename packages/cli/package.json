@@ -1,6 +1,6 @@
 {
   "name": "@diguike/claudedoctor",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "克劳德医生 · 给 Claude Code 做封禁风险体检的 CLI：检测 → 修复 → 复验。只算有因果的信号，每条带置信度与出处。",
   "type": "module",
   "bin": {
@@ -45,14 +45,12 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
+    "@clack/prompts": "^1.7.0",
     "@claudedoctor/core": "workspace:*",
     "@types/node": "^20.14.0",
     "esbuild": "^0.28.1",
     "picocolors": "^1.1.1"
   },
   "license": "MIT",
-  "author": "chaoyang",
-  "dependencies": {
-    "@clack/prompts": "^1.7.0"
-  }
+  "author": "chaoyang"
 }

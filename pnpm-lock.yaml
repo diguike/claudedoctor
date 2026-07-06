@@ -13,11 +13,10 @@ importers:
         version: 5.9.3
 
   packages/cli:
-    dependencies:
+    devDependencies:
       '@clack/prompts':
         specifier: ^1.7.0
         version: 1.7.0
-    devDependencies:
       '@claudedoctor/core':
         specifier: workspace:*
         version: link:../core
