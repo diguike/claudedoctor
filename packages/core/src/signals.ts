@@ -476,12 +476,16 @@ const timezone: Detector = (i) => {
       ? {
           fix: {
             kind: 'advisory' as const,
-            title: '为终端设置 TZ=Asia/Singapore（预防性，非确认因果）',
-            commands: ['export TZ=Asia/Singapore  # 仅影响终端程序，不改系统时钟'],
+            title: '只给 Claude Code 用受支持时区（Asia/Singapore，预防性）',
+            commands: [
+              'claude() { TZ=Asia/Singapore command claude "$@"; }  # 只有 claude 命令用新时区',
+              '# 想让整个终端都用可改为: export TZ=Asia/Singapore',
+            ],
             note:
-              '预防性画像卫生：当前版本不编码时区，这一项不会提升健康分；它只把终端进程看到的时区改成受支持地区，' +
-              '作为机制回归时的保险。注意会影响终端里所有程序的时钟显示，可随时一键撤销。',
-            apply: { set: { TZ: 'Asia/Singapore' } },
+              '预防性画像卫生：当前版本已不编码时区，这一项不会提升健康分，纯粹为机制回归时留个保险。' +
+              '默认做法是给 claude 命令套一个 shell 函数——只有 Claude Code 看到新时区，' +
+              '系统时钟、菜单栏、日历、连终端里其它程序都不受影响，可随时一键撤销。',
+            apply: { raw: ['claude() { TZ=Asia/Singapore command claude "$@"; }'] },
             precautionary: true,
           },
         }

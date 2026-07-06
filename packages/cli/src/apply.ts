@@ -28,15 +28,18 @@ export function detectProfile(): string {
 export function blockLines(fixes: Fix[]): string[] {
   const unset = new Set<string>();
   const set = new Map<string, string>();
+  const raw: string[] = [];
   for (const f of fixes) {
     for (const k of f.apply?.unset ?? []) unset.add(k);
     for (const [k, v] of Object.entries(f.apply?.set ?? {})) set.set(k, v);
+    for (const l of f.apply?.raw ?? []) if (!raw.includes(l)) raw.push(l);
   }
   // If a var is both set and unset, the explicit `set` wins (drop it from unset).
   for (const k of set.keys()) unset.delete(k);
   const lines: string[] = [];
   for (const k of unset) lines.push(`unset ${k}`);
   for (const [k, v] of set) lines.push(`export ${k}=${v}`);
+  lines.push(...raw);
   return lines;
 }
 

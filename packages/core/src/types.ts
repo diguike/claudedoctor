@@ -140,7 +140,12 @@ export interface Fix {
    * profile on the user's behalf). Present only for fixes safe to auto-apply;
    * advisory fixes omit it. The CLI turns this into a managed shell-profile block.
    */
-  apply?: { set?: Record<string, string>; unset?: string[] };
+  apply?: {
+    set?: Record<string, string>;
+    unset?: string[];
+    /** arbitrary shell lines (e.g. a scoped wrapper function) appended to the managed block */
+    raw?: string[];
+  };
   /**
    * true = precautionary hygiene, NOT a confirmed causal improvement (e.g. the
    * timezone override, dormant since the marker was removed). Surfaced distinctly
