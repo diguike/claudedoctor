@@ -13,6 +13,10 @@
  * Any probe discloses your egress IP to the chosen provider; the caller surfaces that.
  */
 import { KNOWN_UNSUPPORTED_REGIONS, type NetworkInfo } from '@claudedoctor/core';
+import { execFileSync } from 'node:child_process';
+
+type IpFamily = 'ipv4' | 'ipv6';
+type ProbeResult = NonNullable<NetworkInfo['families']>[IpFamily];
 
 async function fetchJson<T>(url: string, timeoutMs: number): Promise<T | null> {
   const controller = new AbortController();
@@ -25,6 +29,20 @@ async function fetchJson<T>(url: string, timeoutMs: number): Promise<T | null> {
     return null;
   } finally {
     clearTimeout(t);
+  }
+}
+
+function fetchJsonViaCurl<T>(url: string, timeoutMs: number, family: IpFamily): T | null {
+  try {
+    const seconds = Math.max(1, Math.ceil(timeoutMs / 1000));
+    const out = execFileSync(
+      'curl',
+      ['-fsSL', family === 'ipv4' ? '-4' : '-6', '--connect-timeout', String(seconds), '--max-time', String(seconds), url],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    return JSON.parse(out) as T;
+  } catch {
+    return null;
   }
 }
 
@@ -52,13 +70,16 @@ interface IpApiIsResponse {
   asn?: { org?: string; descr?: string; abuser_score?: string };
 }
 
-async function probeIpApiIs(timeoutMs: number): Promise<NetworkInfo | null> {
-  const d = await fetchJson<IpApiIsResponse>('https://api.ipapi.is/', timeoutMs);
+async function probeIpApiIs(timeoutMs: number, family?: IpFamily): Promise<ProbeResult> {
+  const d = family
+    ? fetchJsonViaCurl<IpApiIsResponse>('https://api.ipapi.is/', timeoutMs, family)
+    : await fetchJson<IpApiIsResponse>('https://api.ipapi.is/', timeoutMs);
   if (!d || !d.location?.country_code) return null;
   const cc = d.location.country_code.toUpperCase();
   const flaggedProxy = Boolean(d.is_vpn || d.is_proxy);
   const threatLevel = d.is_abuser ? 'high' : flaggedProxy || d.is_tor ? 'medium' : 'low';
   return {
+    family: family ?? 'ipv4',
     provider: 'ipapi.is',
     egressIp: d.ip ?? null,
     countryCode: cc,
@@ -92,16 +113,15 @@ interface IpDataResponse {
   message?: string;
 }
 
-async function probeIpData(apiKey: string, timeoutMs: number): Promise<NetworkInfo | null> {
-  const d = await fetchJson<IpDataResponse>(
-    `https://api.ipdata.co/?api-key=${encodeURIComponent(apiKey)}`,
-    timeoutMs,
-  );
+async function probeIpData(apiKey: string, timeoutMs: number, family?: IpFamily): Promise<ProbeResult> {
+  const url = `https://api.ipdata.co/?api-key=${encodeURIComponent(apiKey)}`;
+  const d = family ? fetchJsonViaCurl<IpDataResponse>(url, timeoutMs, family) : await fetchJson<IpDataResponse>(url, timeoutMs);
   if (!d || d.message || !d.country_code) return null;
   const cc = d.country_code.toUpperCase();
   const th = d.threat ?? {};
   const asnType = d.asn?.type === 'hosting' || th.is_datacenter ? 'datacenter' : d.asn?.type === 'isp' ? 'residential' : 'unknown';
   return {
+    family: family ?? 'ipv4',
     provider: 'ipdata',
     egressIp: d.ip ?? null,
     countryCode: cc,
@@ -131,14 +151,13 @@ interface IpApiResponse {
   query?: string;
 }
 
-async function probeIpApi(timeoutMs: number): Promise<NetworkInfo | null> {
-  const d = await fetchJson<IpApiResponse>(
-    'http://ip-api.com/json/?fields=status,country,countryCode,isp,org,as,proxy,hosting,mobile,query',
-    timeoutMs,
-  );
+async function probeIpApi(timeoutMs: number, family?: IpFamily): Promise<ProbeResult> {
+  const url = 'http://ip-api.com/json/?fields=status,country,countryCode,isp,org,as,proxy,hosting,mobile,query';
+  const d = family ? fetchJsonViaCurl<IpApiResponse>(url, timeoutMs, family) : await fetchJson<IpApiResponse>(url, timeoutMs);
   if (!d || d.status !== 'success') return null;
   const cc = d.countryCode ? d.countryCode.toUpperCase() : null;
   return {
+    family: family ?? 'ipv4',
     provider: 'ip-api',
     egressIp: d.query ?? null,
     countryCode: cc,
@@ -154,8 +173,57 @@ async function probeIpApi(timeoutMs: number): Promise<NetworkInfo | null> {
   };
 }
 
-/** Probe with the richest available provider. */
-export async function probeNetwork(timeoutMs = 6000): Promise<NetworkInfo | null> {
+function probeScore(n: ProbeResult): number {
+  if (!n) return -1;
+  let score = 0;
+  if (n.countryCode && KNOWN_UNSUPPORTED_REGIONS[n.countryCode]) score += 100;
+  if (n.isTor) score += 40;
+  if (n.isProxy) score += 30;
+  if (n.threatLevel === 'high') score += 25;
+  if (n.isHosting || n.asnType === 'datacenter') score += 15;
+  return score;
+}
+
+function aggregateFamilyResults(ipv4: ProbeResult, ipv6: ProbeResult): NetworkInfo | null {
+  const results = [ipv4, ipv6].filter((x): x is NonNullable<ProbeResult> => x !== null);
+  if (results.length === 0) return null;
+  const selected = results.sort((a, b) => probeScore(b) - probeScore(a))[0]!;
+  return {
+    provider: selected.provider,
+    egressIp: selected.egressIp,
+    countryCode: selected.countryCode,
+    countryName: selected.countryName,
+    isSupportedRegion: selected.isSupportedRegion,
+    asnType: selected.asnType,
+    asnOrg: selected.asnOrg,
+    isProxy: selected.isProxy,
+    isTor: selected.isTor,
+    isHosting: selected.isHosting,
+    isMobile: selected.isMobile,
+    threatLevel: selected.threatLevel,
+    riskScore: selected.riskScore ?? null,
+    selectedFamily: selected.family,
+    families: { ipv4, ipv6 },
+  };
+}
+
+async function probeFamily(timeoutMs: number, family: IpFamily): Promise<ProbeResult> {
+  const key = process.env.IPDATA_API_KEY;
+  if (key) {
+    const viaIpData = await probeIpData(key, timeoutMs, family);
+    if (viaIpData) return viaIpData;
+  }
+  const viaIpApiIs = await probeIpApiIs(timeoutMs, family);
+  if (viaIpApiIs) return viaIpApiIs;
+  return probeIpApi(timeoutMs, family);
+}
+
+/**
+ * What the current Node runtime sees via its default fetch stack (no forced
+ * -4/-6 curl path). This catches system-proxy-only setups where browser/curl
+ * and Node-based tools can observe different egress paths.
+ */
+async function probeRuntimePath(timeoutMs: number): Promise<ProbeResult> {
   const key = process.env.IPDATA_API_KEY;
   if (key) {
     const viaIpData = await probeIpData(key, timeoutMs);
@@ -164,6 +232,22 @@ export async function probeNetwork(timeoutMs = 6000): Promise<NetworkInfo | null
   const viaIpApiIs = await probeIpApiIs(timeoutMs);
   if (viaIpApiIs) return viaIpApiIs;
   return probeIpApi(timeoutMs);
+}
+
+/** Probe with the richest available provider. */
+export async function probeNetwork(timeoutMs = 6000): Promise<NetworkInfo | null> {
+  const [ipv4, ipv6, runtimePath] = await Promise.all([
+    probeFamily(timeoutMs, 'ipv4'),
+    probeFamily(timeoutMs, 'ipv6'),
+    probeRuntimePath(timeoutMs),
+  ]);
+  const dual = aggregateFamilyResults(ipv4, ipv6);
+  if (dual) return { ...dual, runtimePath };
+
+  if (runtimePath) {
+    return { ...runtimePath, selectedFamily: null, runtimePath };
+  }
+  return null;
 }
 
 /** Which provider a probe would use, for honest disclosure before it runs. */

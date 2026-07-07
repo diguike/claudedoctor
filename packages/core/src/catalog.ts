@@ -31,6 +31,8 @@ export const SOURCES = {
   regionBlock: 'https://github.com/anthropics/claude-code/issues/2656',
   /** Our own byte-level M0 forensics ledger. */
   mechanismLedger: 'docs/mechanism.md',
+  /** Our own ledger for local-only network-path divergence diagnosis. */
+  networkLedger: 'docs/ban-signals.md',
 } as const;
 
 /**

@@ -8,6 +8,18 @@ import type { DoctorInput, Finding } from './types.js';
 
 type Detector = (input: DoctorInput) => Finding | null;
 
+function networkSource(i: NonNullable<DoctorInput['network']>): string {
+  const family = i.selectedFamily ? `/${i.selectedFamily}` : '';
+  return `${i.provider}${family}${i.egressIp ? ` · ${i.egressIp}` : ''}`;
+}
+
+function familyBreakdown(i: NonNullable<DoctorInput['network']>): string {
+  const entries = Object.entries(i.families ?? {})
+    .filter(([, v]) => v)
+    .map(([family, v]) => `${family.toUpperCase()}=${v!.countryName ?? v!.countryCode ?? '—'}${v!.egressIp ? ` · ${v!.egressIp}` : ''}`);
+  return entries.length >= 2 ? `；双栈：${entries.join('；')}` : '';
+}
+
 /**
  * A1 — base URL + credential type. The single confirmed causal axis: a
  * *subscription OAuth* credential leaving the official client (via a relay) is
@@ -312,7 +324,8 @@ const automation: Detector = (i) => {
 const region: Detector = (i) => {
   const n = i.network;
   if (!n) return null;
-  const src = `${n.provider}${n.egressIp ? ` · ${n.egressIp}` : ''}`;
+  const src = networkSource(n);
+  const dual = familyBreakdown(n);
 
   if (n.countryCode && KNOWN_UNSUPPORTED_REGIONS[n.countryCode]) {
     return {
@@ -322,10 +335,10 @@ const region: Detector = (i) => {
       confidence: 'confirmed',
       causal: true,
       scored: true,
-      summary: `出口 IP 位于不支持地区：${n.countryName ?? n.countryCode} — 官方明列为封号原因之一`,
+      summary: `出口 IP 位于不支持地区：${n.countryName ?? n.countryCode}${n.selectedFamily ? `（命中 ${n.selectedFamily}）` : ''} — 官方明列为封号原因之一`,
       detail:
         `（${src}）官方帮助中心把"在不支持地区创建账号"列为账号被禁用原因；不支持地区的请求也会被直接 400 拒绝。` +
-        'VPN 只是访问手段，被禁止的是"从不支持地区访问/注册"这一结果。',
+        `VPN 只是访问手段，被禁止的是"从不支持地区访问/注册"这一结果。${dual}`,
       evidence: [SOURCES.appeals, SOURCES.regionBlock, SOURCES.supportedCountries],
       fix: {
         kind: 'network',
@@ -345,8 +358,8 @@ const region: Detector = (i) => {
     scored: true,
     summary:
       n.countryCode && n.isSupportedRegion
-        ? `${n.countryName ?? n.countryCode}（受支持）· ${src}`
-        : `未命中已知不支持清单 · ${src}`,
+        ? `${n.countryName ?? n.countryCode}（受支持）· ${src}${dual}`
+        : `未命中已知不支持清单 · ${src}${dual}`,
     evidence: [SOURCES.supportedCountries],
   };
 };
@@ -357,6 +370,7 @@ const proxy: Detector = (i) => {
   if (!n) return null;
   const flagged = n.isProxy === true || n.isTor === true || n.threatLevel === 'high';
   const risk = n.riskScore ? `｜风险分 ${n.riskScore}` : '';
+  const dual = familyBreakdown(n);
   if (!flagged) {
     if (n.isProxy === null && n.isTor === null) return null; // provider gave nothing
     return {
@@ -366,7 +380,7 @@ const proxy: Detector = (i) => {
       confidence: 'reported',
       causal: false,
       scored: false,
-      summary: `未被标记为代理/VPN/Tor · ${n.provider}${risk}`,
+      summary: `未被标记为代理/VPN/Tor · ${networkSource(n)}${risk}${dual}`,
       evidence: [SOURCES.appeals],
     };
   }
@@ -380,10 +394,10 @@ const proxy: Detector = (i) => {
     confidence: 'reported',
     causal: false,
     scored: false,
-    summary: `出口 IP 被标记为 ${kinds.join(' / ')}（${n.provider}${risk}）— 与登录被拦、社区风控报告相关`,
+    summary: `出口 IP 被标记为 ${kinds.join(' / ')}（${networkSource(n)}${risk}）— 与登录被拦、社区风控报告相关`,
     detail:
       '被标记的代理/VPN/Tor 出口在 claude.ai 登录时更易被 Cloudflare 拦，也见于社区封号自述（reported，' +
-      '非官方确认）。这是 IP 信誉信号，不等于确定封号；不计入风险分，仅提示。',
+      `非官方确认）。这是 IP 信誉信号，不等于确定封号；不计入风险分，仅提示。${dual}`,
     evidence: [SOURCES.appeals, SOURCES.datacenterOAuth],
     fix: {
       kind: 'network',
@@ -405,16 +419,65 @@ const datacenter: Detector = (i) => {
     confidence: 'confirmed',
     causal: true,
     scored: false, // access issue, not a ban — don't inflate the risk summary
-    summary: `出口为机房 IP${n.asnOrg ? `（${n.asnOrg}）` : ''} — 可能被 Cloudflare 拦 claude.ai OAuth 登录`,
+    summary: `出口为机房 IP${n.asnOrg ? `（${n.asnOrg}）` : ''}${n.selectedFamily ? ` · ${n.selectedFamily}` : ''} — 可能被 Cloudflare 拦 claude.ai OAuth 登录`,
     detail:
       '机房/数据中心 ASN 的出口 IP 常被 Cloudflare 在 claude.ai OAuth 端点出质询而登录失败（这是"访问被拒"，' +
-      '不是账号被封，Anthropic 将其标为 external）。API 端点通常不受影响。',
+      `不是账号被封，Anthropic 将其标为 external）。API 端点通常不受影响。${familyBreakdown(n)}`,
     evidence: [SOURCES.datacenterOAuth],
     fix: {
       kind: 'network',
       title: '登录用住宅出口',
       commands: [],
       note: '若 OAuth 登录卡在 Cloudflare 质询，换一个住宅网络出口再登录。',
+    },
+  };
+};
+
+/** B4-route-divergence — Node runtime sees a different egress path than curl/dual-stack probing. */
+const routeDivergence: Detector = (i) => {
+  const n = i.network;
+  const runtime = n?.runtimePath;
+  if (!n || !runtime) return null;
+
+  const sameCountry = runtime.countryCode != null && runtime.countryCode === n.countryCode;
+  const sameIp = runtime.egressIp != null && runtime.egressIp === n.egressIp;
+  if (sameCountry && sameIp) return null;
+
+  const runtimeSrc = `${runtime.provider}${runtime.egressIp ? ` · ${runtime.egressIp}` : ''}`;
+  const dual = familyBreakdown(n);
+  const runtimeUnsupported = runtime.countryCode != null && KNOWN_UNSUPPORTED_REGIONS[runtime.countryCode];
+  const selectedSupported = n.countryCode != null && !KNOWN_UNSUPPORTED_REGIONS[n.countryCode];
+
+  return {
+    id: 'B4-route-divergence',
+    title: '代理路径一致性',
+    status: runtimeUnsupported && selectedSupported ? 'warn' : 'info',
+    confidence: 'reported',
+    causal: true,
+    classLabel: '路径卫生',
+    scored: false,
+    summary:
+      runtimeUnsupported && selectedSupported
+        ? `当前 Node 网络栈仍看到不支持地区：${runtime.countryName ?? runtime.countryCode}（${runtimeSrc}）`
+        : `当前 Node 网络栈与双栈/curl 出口不一致：Node=${runtime.countryName ?? runtime.countryCode ?? '—'} · 探测=${n.countryName ?? n.countryCode ?? '—'}`,
+    detail:
+      `双栈/curl 探测当前选中的出口是 ${n.countryName ?? n.countryCode ?? '—'}（${networkSource(n)}），` +
+      `但当前 Node 进程默认网络栈看到的是 ${runtime.countryName ?? runtime.countryCode ?? '—'}（${runtimeSrc}）。` +
+      `这通常出现在"只开系统代理、没开 TUN"或命令行工具未显式设置 HTTP(S)_PROXY/ALL_PROXY 的场景：` +
+      `浏览器/部分 curl 流量已出海，但 Node/CLI 工具仍可能本地直连或命中另一条分流路径。` +
+      `对 Node-based 工具（包括很多 AI CLI）来说，这是实际可用性与地区判断都会踩坑的路径卫生问题。${dual}`,
+    evidence: [SOURCES.networkLedger],
+    fix: {
+      kind: 'network',
+      title: '优先开启 TUN；否则给命令行工具显式设置代理环境变量',
+      commands: [
+        'export HTTP_PROXY=http://127.0.0.1:<port>',
+        'export HTTPS_PROXY=http://127.0.0.1:<port>',
+        'export ALL_PROXY=socks5h://127.0.0.1:<port>',
+      ],
+      note:
+        '系统代理不等于所有 Node/CLI 进程都走代理。若 --net 仍报不支持地区，优先打开代理客户端的 TUN 模式；' +
+        '否则至少给目标命令所在 shell 显式设置 HTTP_PROXY/HTTPS_PROXY/ALL_PROXY。',
     },
   };
 };
@@ -504,6 +567,7 @@ export const DETECTORS: Detector[] = [
   region,
   proxy,
   datacenter,
+  routeDivergence,
   dateStego,
   timezone,
 ];

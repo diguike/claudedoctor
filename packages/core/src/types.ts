@@ -33,6 +33,7 @@ export type SignalId =
   | 'B4-region'           // egress IP in an unsupported region
   | 'B4-datacenter'       // datacenter ASN → claude.ai OAuth reachability
   | 'B4-proxy'            // egress IP flagged as proxy / VPN / Tor
+  | 'B4-route-divergence' // curl/dual-stack path differs from the current Node runtime path
   | 'M0-date-stego'       // the (falsified) date-line steganography, re-checked
   | 'AMB-timezone';       // system timezone — ambiance only
 
@@ -51,8 +52,9 @@ export type CredentialKind =
 /** What is sitting specifically in the ANTHROPIC_API_KEY env var. */
 export type ApiKeyEnvKind = 'none' | 'api-key' | 'oauth-token' | 'other';
 
-/** Optional network probe result (B4). Only present when the user opts into `--net`. */
-export interface NetworkInfo {
+/** A single egress path (IPv4 or IPv6) as seen by the network-intel provider. */
+export interface NetworkPathInfo {
+  family: 'ipv4' | 'ipv6';
   /** which provider produced this, e.g. 'ip-api' | 'ipdata'. */
   provider: string;
   egressIp: string | null;
@@ -75,6 +77,20 @@ export interface NetworkInfo {
   threatLevel: 'low' | 'medium' | 'high' | null;
   /** human-readable risk/abuse score label, e.g. "0.0153 (Elevated)" (optional). */
   riskScore?: string | null;
+}
+
+/** Optional network probe result (B4). Only present when the user opts into `--net`. */
+export interface NetworkInfo extends Omit<NetworkPathInfo, 'family'> {
+  /** Which path the summary currently reflects. */
+  selectedFamily: 'ipv4' | 'ipv6' | null;
+  /** Family-by-family breakdown when dual-stack probing succeeds. */
+  families?: Partial<Record<'ipv4' | 'ipv6', NetworkPathInfo | null>>;
+  /**
+   * What the current Node runtime's default fetch path sees without forcing
+   * curl -4/-6. This catches "browser/curl exits overseas but Node-based tools
+   * still egress locally" situations under system-proxy-only setups.
+   */
+  runtimePath?: NetworkPathInfo | null;
 }
 
 /** The sanitized environment snapshot the CLI hands to core. All fields optional/partial-safe. */

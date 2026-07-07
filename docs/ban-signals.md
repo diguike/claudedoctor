@@ -26,6 +26,7 @@
 | **A3′** | 异常自动化 / 高频请求触发 abuse filter | 中（机制确证，阈值未公开） | reported | ❌ 本地难量化 | 提示性 | ⚠️ 仅提示 |
 | **B4-region** | 出口 IP 属**不支持地区** | 强（官方明列"unsupported location"为封号原因） | **confirmed** | ✅ GeoIP（需联网 opt-in） | 建议性 | ✅ 中 |
 | **B4-dc** | 出口 IP 为**机房 ASN** → claude.ai OAuth 被 Cloudflare 拦 | 强（接入层，confirmed；非封号） | **confirmed** | ✅ ASN 查询（需联网） | ✅ 换住宅出口 | ⚠️ 提示（是"连不上"不是"封"） |
+| **B4-route** | **Node 默认网络栈**与双栈/curl 探测出口不一致 | 中（本机实测、影响 Node/CLI 工具地区判断与可达性） | reported | ✅（`--net` 下本机双探测） | ✅ 开 TUN / 显式 proxy env | ⚠️ 提示（路径卫生，不直接计分） |
 | **B4-hop** | geo-hopping / 频繁切换国家节点 | 弱（机制合理但无一手证据） | speculative | ❌ | ❌ | ❌ 仅氛围展示 |
 | **M0-stego** | 日期行时区/hostname 隐写 | —— | **已证伪@2.1.201**（见 mechanism.md） | ✅ hex 复检 | —— | ❌ 不计分，仅"已体检未命中" |
 | **AMB** | 浏览器时区/语言/字体/canvas 指纹 | 无（终端进程不参与） | 氛围 | Web 侧才相关 | —— | ❌ 明确标注"不影响 Claude Code" |
@@ -120,7 +121,29 @@
 
 **speculative（不入分，防 FUD）**："1 小时切美/日/港节点必封""IP 占封号原因 60%""申诉成功率 3.3%"——全部出自 VPN 厂商 / 中转商 / 防指纹浏览器引流文，无出处、有变现动机。
 
-**落地**：`B4-region`（出口 IP 是否官方支持地区）与 `B4-dc`（是否机房 ASN，影响 OAuth 可达性）有因果、可检测、可开药；`B4-hop` 只作氛围提示。**全部需联网查询 → 默认关闭，显式 opt-in（`--net` / `--online`），符合"默认 100% 本地"隐私原则。**
+**落地**：`B4-region`（出口 IP 是否官方支持地区）与 `B4-dc`（是否机房 ASN，影响 OAuth 可达性）有因果、可检测、可开药；`B4-route` 用本机实测识别"浏览器/部分 curl 已出海，但 Node/CLI 工具仍直连本地"的代理路径不一致；`B4-hop` 只作氛围提示。**全部需联网查询 → 默认关闭，显式 opt-in（`--net` / `--online`），符合"默认 100% 本地"隐私原则。**
+
+### B4-route · Node / CLI 代理路径不一致（reported，本机实测）
+
+**结论**：在"只开系统代理、未开 TUN"的常见配置下，浏览器和部分 `curl` 请求可能已经走了海外出口，但 **Node 默认网络栈** 仍然本地直连或命中另一条分流路径。对 Claude Code / `claudedoctor` / 其它 Node-based CLI 来说，这会直接造成**地区判断和可达性不一致**。
+
+**为什么要做这个检测**
+- 这不是服务端公开规则，而是**本机可复现的路径卫生问题**：同一台机器上，`curl` / 双栈探测显示支持地区，但 Node `fetch` 仍显示中国等不支持地区。
+- 对用户来说，这类问题的体感极差：网页看着正常，命令行工具却仍报 unsupported region / China。
+- 这类问题可以给出明确药方：**优先开 TUN**；否则给命令行工具显式设置 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`。
+
+**在 Claude Doctor 里的实现**
+- `--net` 下同时做两类探测：
+  - **双栈/curl 路径**：`curl -4/-6` 强制 IPv4/IPv6，看网络层真实出口；
+  - **当前 Node 运行时路径**：当前进程的默认 `fetch` 看到什么出口。
+- 如果两者国家/IP 不一致，就提示 `B4-route`，但**不计入健康分**。它是"路径卫生"而非官方封号条款。
+
+**药方**
+- 最稳：开启代理客户端 **TUN mode**
+- 否则：给目标 shell/命令显式设置
+  - `HTTP_PROXY=http://127.0.0.1:<port>`
+  - `HTTPS_PROXY=http://127.0.0.1:<port>`
+  - `ALL_PROXY=socks5h://127.0.0.1:<port>`
 
 ---
 

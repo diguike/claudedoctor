@@ -53,7 +53,7 @@ diagnosis ships with an executable, re-verifiable fix.
 |---|---|---|
 | 🔑 | **Credentials & relays** — subscription OAuth leaving the official client via a relay (the one officially-confirmed ban cause) | CLI |
 | 🖥️ | **Client integrity** — official Claude Code vs a spoofed harness | CLI |
-| 🌐 | **Egress network & IP profile** — region, datacenter/proxy/VPN/Tor, IP purity (keyless via ipapi.is; optional ipdata) | CLI + web |
+| 🌐 | **Egress network & IP profile** — region, datacenter/proxy/VPN/Tor, IP purity, and dual-stack IPv4/IPv6 divergence when present (keyless via ipapi.is; optional ipdata) | CLI + web |
 | 🧩 | **Device & telemetry transparency** — local vs outbound identity, never abusing your credentials | CLI |
 | 🧭 | **Timezone profile factor** — byte-verified: the date-line marker existed, was official, and was removed in 2026-07 | CLI + web |
 

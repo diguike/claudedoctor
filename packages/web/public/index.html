@@ -203,6 +203,20 @@
   .dim[data-tone="neutral"] { --dc: var(--info); } .dim[data-tone="neutral"] .dv { color: var(--ink); }
   .ipmeta { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px 26px; font-size: 13px; color: var(--ink-soft); font-family: var(--mono); }
   .ipmeta span b { color: var(--ink); font-weight: 600; }
+  .stackgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+  @media (max-width: 680px) { .stackgrid { grid-template-columns: 1fr; } }
+  .stack { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 14px 15px; }
+  .stack__top { display: flex; align-items: baseline; gap: 10px; }
+  .stack__name { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); }
+  .stack__status { margin-left: auto; font-family: var(--mono); font-size: 11px; border-radius: 999px; padding: 3px 8px; border: 1px solid var(--line); }
+  .stack__status.good { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+  .stack__status.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+  .stack__status.risk { color: var(--risk); border-color: color-mix(in srgb, var(--risk) 45%, transparent); }
+  .stack__status.neutral { color: var(--info); }
+  .stack__ip { margin-top: 8px; font-family: var(--mono); font-size: 13px; color: var(--ink); overflow-wrap: anywhere; }
+  .stack__meta { margin-top: 7px; font-size: 13px; color: var(--ink-soft); line-height: 1.55; }
+  .divergence { margin-top: 16px; border: 1px solid var(--line); border-radius: 12px; padding: 13px 15px; background: color-mix(in srgb, var(--surface-2) 72%, transparent); font-size: 13px; color: var(--ink-soft); line-height: 1.6; }
+  .divergence b { color: var(--ink); }
   .ip-degrade { color: var(--ink-soft); font-size: 15px; padding: 10px 0; max-width: 70ch; }
 
   /* ================= SECTIONS ================= */
@@ -652,7 +666,60 @@
 
   /* ---- exposure scoring (browser scope, honest weights) ---- */
   const W = { region: 55, datacenter: 15, proxy: 18, abuser: 12, ambiance: 6 };
-  let state = { rows: [], score: null, done: false };
+  let state = { rows: [], score: null, done: false, families: null, selectedFamily: null, divergence: null };
+
+  function fetchJsonTimeout(url, timeout = 7000, init) {
+    const ctrl = new AbortController();
+    const to = setTimeout(()=>ctrl.abort(), timeout);
+    return fetch(url, { ...(init||{}), signal: ctrl.signal })
+      .then(res => res.json())
+      .finally(() => clearTimeout(to));
+  }
+
+  async function fetchFamilyProfile(family) {
+    const ipEndpoint = family === 'ipv6' ? 'https://api6.ipify.org?format=json' : 'https://api.ipify.org?format=json';
+    try {
+      const ipRes = await fetchJsonTimeout(ipEndpoint);
+      if (!ipRes || !ipRes.ip) return null;
+      const data = await fetchJsonTimeout(`https://api.ipapi.is/?q=${encodeURIComponent(ipRes.ip)}`);
+      if (!data || data.error || !data.location) return null;
+      return { family, ...data };
+    } catch {
+      return null;
+    }
+  }
+
+  function scoreFamily(d) {
+    if (!d) return -1;
+    let score = 0;
+    const cc = ((d.location&&d.location.country_code)||'').toUpperCase();
+    if (UNSUPPORTED[cc]) score += 100;
+    if (d.is_tor) score += 40;
+    if (d.is_vpn || d.is_proxy) score += 30;
+    if (d.is_abuser) score += 25;
+    if (d.is_datacenter) score += 15;
+    return score;
+  }
+
+  function compareFamilies(ipv4, ipv6) {
+    const available = [ipv4, ipv6].filter(Boolean);
+    if (!available.length) return { selected: null, divergence: null };
+    const selected = available.slice().sort((a,b)=>scoreFamily(b)-scoreFamily(a))[0];
+    let divergence = null;
+    if (ipv4 && ipv6) {
+      const c4 = ((ipv4.location&&ipv4.location.country_code)||'').toUpperCase();
+      const c6 = ((ipv6.location&&ipv6.location.country_code)||'').toUpperCase();
+      const unsupported4 = !!UNSUPPORTED[c4];
+      const unsupported6 = !!UNSUPPORTED[c6];
+      if (c4 !== c6 || unsupported4 !== unsupported6 || ipv4.ip !== ipv6.ip) {
+        divergence = {
+          ipv4: { ip: ipv4.ip||'—', country: ipv4.location?.country || c4 || '—', unsupported: unsupported4 },
+          ipv6: { ip: ipv6.ip||'—', country: ipv6.location?.country || c6 || '—', unsupported: unsupported6 },
+        };
+      }
+    }
+    return { selected, divergence };
+  }
 
   function bandOf(score) {
     if (score == null) return { key:'scan', color:'var(--info)', label:{zh:'扫描中',en:'scanning'}, verdict:{zh:'',en:''} };
@@ -741,7 +808,7 @@
       document.getElementById('ipAddr').textContent = '—';
       return;
     }
-    document.getElementById('ipAddr').textContent = (d.ip || '—') + (state.sample ? (lang==='zh'?'（示例）':' (sample)') : '');
+    document.getElementById('ipAddr').textContent = (d.ip || '—') + (state.selectedFamily ? ` · ${state.selectedFamily.toUpperCase()}` : '') + (state.sample ? (lang==='zh'?'（示例）':' (sample)') : '');
     const loc = d.location || {}, comp = d.company || {}, asn = d.asn || {};
     const isResidential = comp.type === 'isp';
     const isNative = !!(asn.country && loc.country_code && asn.country.toUpperCase() === loc.country_code.toUpperCase());
@@ -776,13 +843,39 @@
       `${loc.city?loc.city+', ':''}${loc.country||''}`,
     ].filter(Boolean).map(s=>`<span>${s}</span>`).join('');
 
+    const families = state.families || {};
+    const renderFamily = (name, info) => {
+      if (!info) {
+        return `<div class="stack"><div class="stack__top"><span class="stack__name">${name}</span><span class="stack__status neutral">${lang==='zh'?'不可达':'unavailable'}</span></div><div class="stack__meta">${lang==='zh'?'当前环境未走通这一条栈。':'This address family is not reachable from the current environment.'}</div></div>`;
+      }
+      const cc = ((info.location&&info.location.country_code)||'').toUpperCase();
+      const unsupported = !!UNSUPPORTED[cc];
+      const riskish = unsupported || info.is_datacenter || info.is_vpn || info.is_proxy || info.is_tor || info.is_abuser;
+      const tone = unsupported ? 'risk' : riskish ? 'warn' : 'good';
+      const status = unsupported
+        ? (lang==='zh'?'不支持地区':'unsupported')
+        : riskish
+          ? (lang==='zh'?'需注意':'attention')
+          : (lang==='zh'?'正常':'clean');
+      const companyName = info.company?.name || info.asn?.org || '—';
+      const countryName = info.location?.country || cc || '—';
+      return `<div class="stack"><div class="stack__top"><span class="stack__name">${name}</span><span class="stack__status ${tone}">${status}</span></div><div class="stack__ip">${info.ip||'—'}</div><div class="stack__meta">${countryName} · ${companyName}</div></div>`;
+    };
+
+    const stackHtml = `<div class="stackgrid">${renderFamily('IPv4', families.ipv4)}${renderFamily('IPv6', families.ipv6)}</div>`;
+    const divergenceHtml = state.divergence
+      ? `<div class="divergence"><b>${lang==='zh'?'双栈分歧':'Dual-stack divergence'}</b> · ${lang==='zh'?'IPv4 与 IPv6 的出口画像不同，页面总分按更差路径汇总。':'IPv4 and IPv6 differ, so the page score is aggregated from the worse path.'}<br>${lang==='zh'?'IPv4':'IPv4'}: <b>${state.divergence.ipv4.country}</b> · ${state.divergence.ipv4.ip}${state.divergence.ipv4.unsupported ? ` · ${lang==='zh'?'不支持地区':'unsupported'}` : ''}<br>${lang==='zh'?'IPv6':'IPv6'}: <b>${state.divergence.ipv6.country}</b> · ${state.divergence.ipv6.ip}${state.divergence.ipv6.unsupported ? ` · ${lang==='zh'?'不支持地区':'unsupported'}` : ''}</div>`
+      : '';
+
     body.innerHTML =
       `<div class="meter" style="--mcolor:${pur.color}">
          <div class="meter__top"><span class="lbl">${purLbl}</span><span class="val">${scoreStr || (lang==='zh'?'未知':'unknown')}</span></div>
          <div class="meter__bar"><div class="meter__fill" id="purFill"></div></div>
        </div>
        <div class="dims">${chipHtml}</div>
-       <div class="ipmeta">${metaBits}</div>`;
+       <div class="ipmeta">${metaBits}</div>
+       ${stackHtml}
+       ${divergenceHtml}`;
     const fill = document.getElementById('purFill');
     if (fill) requestAnimationFrame(()=>{ fill.style.width = pur.pct + '%'; });
   }
@@ -795,17 +888,23 @@
     asn:{asn:'AS64500',org:'Example Cloud Ltd',country:'sg',abuser_score:'0.031 (Elevated)'},
     is_datacenter:true, is_vpn:false, is_proxy:false, is_tor:false, is_abuser:false, is_mobile:false };
 
-  function processIp(d, rows) {
+  const SAMPLE_IP_V6 = { ip:'2404:6800:4008:c15::66', location:{country:'China',country_code:'CN',city:'Beijing'},
+    company:{name:'China Unicom Beijing province network',type:'isp',domain:'chinaunicom.cn',abuser_score:'0.0005 (Very Low)'},
+    asn:{asn:'AS4808',org:'China Unicom Beijing province network',country:'cn',abuser_score:'0.0005 (Very Low)'},
+    is_datacenter:false, is_vpn:false, is_proxy:false, is_tor:false, is_abuser:false, is_mobile:false };
+
+  function processIp(d, rows, familyLabel='') {
     const cc = ((d.location&&d.location.country_code)||'').toUpperCase();
     const country = (d.location&&d.location.country)||cc||'—';
     const ip = d.ip||'—'; const company = (d.company&&d.company.name)||'';
     const bad = UNSUPPORTED[cc];
     let causal = 0, access = 0;
+    const fam = familyLabel ? ` · ${familyLabel}` : '';
     if (bad){ causal += W.region;
-      rows.splice(0,0,{ status:'risk', causal:true, weight:W.region, k:{zh:'出口地区',en:'Egress region'}, v:`${country} · ${ip}`,
+      rows.splice(0,0,{ status:'risk', causal:true, weight:W.region, k:{zh:'出口地区',en:'Egress region'}, v:`${country}${fam} · ${ip}`,
         note:{zh:'不支持地区——官方明列为封号原因之一',en:'unsupported region — an official ban reason'} });
     } else {
-      rows.splice(0,0,{ status:'ok', causal:true, k:{zh:'出口地区',en:'Egress region'}, v:`${country} · ${ip}`,
+      rows.splice(0,0,{ status:'ok', causal:true, k:{zh:'出口地区',en:'Egress region'}, v:`${country}${fam} · ${ip}`,
         note:{zh:'未命中已知不支持清单',en:'not on the known-unsupported list'} });
     }
     const proxyFlag = d.is_vpn||d.is_proxy||d.is_tor;
@@ -836,17 +935,28 @@
     rows.push({ status:'info', causal:false, k:{zh:'浏览器语言',en:'Browser language'}, v:(navigator.language||'—'),
       note:{zh:'终端进程不参与此信号，纯氛围',en:'terminal process ignores this — pure ambiance'} });
 
-    let d = null, sample = false;
+    let d = null, sample = false, families = null, selectedFamily = null, divergence = null;
     try {
-      const ctrl = new AbortController(); const to = setTimeout(()=>ctrl.abort(), 7000);
-      const res = await fetch('https://api.ipapi.is/', { signal: ctrl.signal }); clearTimeout(to);
-      d = await res.json();
-      if (!d || !d.location) throw new Error('no-data');
-    } catch { d = SAMPLE_IP; sample = true; }
+      const [v4, v6] = await Promise.all([fetchFamilyProfile('ipv4'), fetchFamilyProfile('ipv6')]);
+      families = { ipv4: v4, ipv6: v6 };
+      const cmp = compareFamilies(v4, v6);
+      d = cmp.selected;
+      divergence = cmp.divergence;
+      selectedFamily = d?.family || null;
+      if (!d) throw new Error('no-data');
+    } catch {
+      d = SAMPLE_IP; sample = true; selectedFamily = 'ipv4';
+      families = { ipv4: { family:'ipv4', ...SAMPLE_IP }, ipv6: { family:'ipv6', ...SAMPLE_IP_V6 } };
+      divergence = compareFamilies(families.ipv4, families.ipv6).divergence;
+    }
 
-    const { causal, access } = processIp(d, rows);
-    document.getElementById('provWho').textContent = sample ? (lang==='zh'?'示例数据':'sample data') : 'ipapi.is';
-    state = { rows, split:{ causal, access, factor }, sample, score: Math.min(100, Math.round(causal+access+factor)), done: true, ipData: d };
+    const { causal, access } = processIp(d, rows, selectedFamily ? selectedFamily.toUpperCase() : '');
+    if (divergence) {
+      rows.splice(2, 0, { status:'warn', causal:true, k:{zh:'双栈分歧',en:'Dual-stack divergence'}, v:`IPv4 / IPv6`,
+        note:{zh:'IPv4 与 IPv6 出口画像不同，总分按更差路径汇总',en:'IPv4 and IPv6 differ; score is aggregated from the worse path'} });
+    }
+    document.getElementById('provWho').textContent = sample ? (lang==='zh'?'示例数据':'sample data') : `ipapi.is${selectedFamily ? ` · ${selectedFamily}` : ''}`;
+    state = { rows, split:{ causal, access, factor }, sample, score: Math.min(100, Math.round(causal+access+factor)), done: true, ipData: d, families, selectedFamily, divergence };
     renderRows(); renderGaugeLabels(); animateGauge(state.score); renderIpProfile();
   }
 
