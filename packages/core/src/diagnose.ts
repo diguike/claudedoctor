@@ -23,7 +23,7 @@ function summarize(findings: Finding[]): Diagnosis['summary'] {
     headline = `有 ${warnCount} 项需要注意（非确定封号，但有因果或卫生问题）`;
   } else {
     level = 'healthy';
-    headline = '官方配置，未见已知封号向量';
+    headline = '未见已知高置信封号向量；不等于风险为零';
   }
 
   return { level, riskCount, warnCount, okCount, infoCount, headline };

@@ -189,7 +189,7 @@ async function cmdVerify(flags: Flags): Promise<number> {
     process.stdout.write(pc.dim(`      "${result.text}"\n`));
     process.stdout.write(pc.dim(`      撇号 hex=${result.apostropheHex}  分隔符 hex=${result.separatorHex}\n\n`));
   } else {
-    process.stdout.write(pc.yellow('   ⚠ 未能抓到日期行（claude 未安装/未登录，或代理超时）。跳过字节复检。\n\n'));
+    process.stdout.write(pc.yellow('   ⚠ 未能抓到日期行（claude 未安装/未登录，或代理超时）。本次只复跑体检，不构成完整复诊闭环。\n\n'));
   }
   // 复跑体检（把复检到的 dateLine 一并喂给诊断）
   const input = await buildInput(flags);
@@ -214,6 +214,7 @@ function printHelp(): void {
       BANNER +
       '\n\n' +
       '  给本地 Claude Code 做体检 → 开药 → 复诊。只碰有因果的封号信号，每条带置信度与出处。\n\n' +
+      pc.dim('  说明: 体检通过仅表示未发现已知高置信风险向量，不保证账号绝不会被限制。\n\n') +
       pc.bold('  用法:\n') +
       '    claudedoctor [check]   体检本地 Claude Code（默认，表格输出）\n' +
       '    claudedoctor fix       开药：交互勾选并应用修复（--dry-run 只看 / --all 全应用 / --revert 撤销）\n' +

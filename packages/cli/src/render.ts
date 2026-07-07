@@ -145,6 +145,7 @@ export function renderDiagnosis(dx: Diagnosis, opts: { why: boolean }): string {
   hints.push('--net 联网体检出口 IP');
   hints.push('fix 勾选并执行修复');
   out.push(pc.dim(`  提示: ${hints.join(' · ')}`));
+  out.push(pc.dim('  边界: 通过体检只代表未发现已知高置信风险向量，不保证账号不会被封或受限。'));
   out.push(pc.dim('  判定说明: confirmed=官方证实 · reported=社区报告 · 因果=有服务端因果 · 画像因子/氛围=不计入风险分'));
   out.push('');
 

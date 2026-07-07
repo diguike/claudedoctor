@@ -103,8 +103,9 @@
       linear-gradient(transparent 0, transparent 95%, color-mix(in srgb, var(--hero-accent) 9%, transparent) 100%);
       -webkit-mask-image: radial-gradient(1200px 700px at 75% 0%, #000 55%, transparent 100%);
       mask-image: radial-gradient(1200px 700px at 75% 0%, #000 55%, transparent 100%); pointer-events: none; }
-  .hero .wrap { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; padding-top: 66px; padding-bottom: 56px; }
+  .hero .wrap { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: center; padding-top: 66px; padding-bottom: 56px; }
   @media (max-width: 900px) { .hero .wrap { grid-template-columns: 1fr; gap: 34px; padding-top: 44px; padding-bottom: 40px; } }
+  .hero__left, .hero__right, .result, .signals { min-width: 0; }
   .hero .eyebrow { color: var(--hero-accent); }
   .hero h1 { font-family: var(--sans); font-weight: 800; font-size: clamp(36px, 4.6vw, 58px); letter-spacing: -.035em; margin: 22px 0 0; color: var(--hero-ink); line-height: 1.06; }
   .hero h1 .hl { color: var(--hero-accent); }
@@ -124,14 +125,14 @@
 
   /* result card (in hero, right column) */
   .result { background: color-mix(in srgb, var(--hero-ink) 4%, transparent); border: 1px solid var(--hero-line); border-radius: 18px; box-shadow: var(--shadow-lg); overflow: hidden; }
-  .result__top { display: grid; grid-template-columns: 260px 1fr; }
-  @media (max-width: 520px) { .result__top { grid-template-columns: 1fr; } }
-  .gauge { padding: 30px 22px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; border-right: 1px solid var(--hero-line); background: color-mix(in srgb, var(--hero-ink) 3%, transparent); }
-  @media (max-width: 520px) { .gauge { border-right: 0; border-bottom: 1px solid var(--hero-line); } }
-  .gauge svg { width: 248px; height: 150px; display: block; }
+  .result__top { display: grid; grid-template-columns: minmax(220px, 260px) minmax(0, 1fr); }
+  @media (max-width: 680px) { .result__top { grid-template-columns: 1fr; } }
+  .gauge { padding: clamp(22px, 3vw, 30px) clamp(16px, 2.4vw, 22px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; border-right: 1px solid var(--hero-line); background: color-mix(in srgb, var(--hero-ink) 3%, transparent); }
+  @media (max-width: 680px) { .gauge { border-right: 0; border-bottom: 1px solid var(--hero-line); } }
+  .gauge svg { width: min(100%, 248px); height: auto; aspect-ratio: 248 / 150; display: block; }
   .gauge .track { fill: none; stroke: color-mix(in srgb, var(--hero-ink) 14%, transparent); stroke-width: 15; stroke-linecap: round; }
   .gauge .prog { fill: none; stroke: var(--gcolor, var(--hero-accent)); stroke-width: 15; stroke-linecap: round; transition: stroke-dashoffset 1s cubic-bezier(.2,.7,.2,1), stroke .4s; filter: drop-shadow(0 0 8px color-mix(in srgb, var(--gcolor, var(--hero-accent)) 55%, transparent)); }
-  .gauge__num { font-family: var(--mono); font-weight: 700; font-size: 58px; line-height: 1; margin-top: -56px; color: var(--gcolor, var(--hero-ink)); font-variant-numeric: tabular-nums; }
+  .gauge__num { font-family: var(--mono); font-weight: 700; font-size: clamp(42px, 7vw, 58px); line-height: 1; margin-top: clamp(-44px, -5vw, -56px); color: var(--gcolor, var(--hero-ink)); font-variant-numeric: tabular-nums; }
   .gauge__den { font-family: var(--mono); font-size: 12px; color: var(--hero-soft); margin-top: 4px; letter-spacing: .03em; }
   .band { margin-top: 18px; font-family: var(--mono); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; font-size: 15px; padding: 7px 16px; border-radius: 999px; border: 1px solid; color: var(--gcolor); border-color: color-mix(in srgb, var(--gcolor) 50%, transparent); background: color-mix(in srgb, var(--gcolor) 14%, transparent); }
   .verdict { margin-top: 13px; font-size: 13.5px; color: var(--hero-soft); max-width: 24ch; line-height: 1.5; }
@@ -157,12 +158,16 @@
   .signals__h .t { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; font-weight: 700; color: var(--hero-soft); text-transform: uppercase; }
   .signals__h .who { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--hero-soft); }
   .rows { display: flex; flex-direction: column; }
-  .row { display: grid; grid-template-columns: 22px 1fr auto; gap: 11px; align-items: baseline; padding: 11px 2px; border-bottom: 1px dashed var(--hero-line); }
+  .row { display: grid; grid-template-columns: 22px minmax(0, 1fr) minmax(0, auto); gap: 11px; align-items: baseline; padding: 11px 2px; border-bottom: 1px dashed var(--hero-line); }
   .row:last-child { border-bottom: 0; }
   .row .ic { font-family: var(--mono); font-weight: 700; text-align: center; }
-  .row .k { font-weight: 600; font-size: 15px; color: var(--hero-ink); }
+  .row .k { min-width: 0; font-weight: 600; font-size: 15px; color: var(--hero-ink); overflow-wrap: anywhere; }
   .row .k small { display: block; font-weight: 400; color: var(--hero-soft); font-size: 12.5px; line-height: 1.45; }
-  .row .v { font-family: var(--mono); font-size: 12px; color: var(--hero-soft); text-align: right; white-space: nowrap; }
+  .row .v { min-width: 0; font-family: var(--mono); font-size: 12px; color: var(--hero-soft); text-align: right; white-space: normal; overflow-wrap: anywhere; }
+  @media (max-width: 680px) {
+    .row { grid-template-columns: 22px minmax(0, 1fr); align-items: start; }
+    .row .v { grid-column: 2; text-align: left; }
+  }
   .st-ok .ic { color: var(--ok); } .st-warn .ic { color: var(--warn); } .st-risk .ic { color: var(--risk); } .st-info .ic { color: var(--info); }
   .tag { font-family: var(--mono); font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--hero-soft); border: 1px solid var(--hero-line); border-radius: 999px; padding: 1px 7px; margin-left: 7px; }
   .tag.causal { color: var(--hero-accent); border-color: color-mix(in srgb, var(--hero-accent) 45%, transparent); }
@@ -170,6 +175,7 @@
   .weight { font-family: var(--mono); font-size: 10px; color: var(--hero-soft); margin-left: 6px; }
   .result__foot { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 13px 20px; border-top: 1px solid var(--hero-line); background: color-mix(in srgb, var(--hero-ink) 3%, transparent); font-size: 12.5px; color: var(--hero-soft); }
   .result__foot .btn { padding: 8px 15px; font-size: 13px; }
+  @media (max-width: 680px) { .result__foot { align-items: flex-start; } }
 
   /* IP profile — full width band below hero */
   .ipband { background: var(--surface); border-bottom: 1px solid var(--line); }
@@ -177,7 +183,7 @@
   .ipcard__h { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
   .ipcard__h .t { font-family: var(--mono); font-size: 20px; letter-spacing: -.01em; font-weight: 700; }
   .ipcard__h .sub { font-family: var(--mono); font-size: 12.5px; color: var(--ink-faint); }
-  .ipcard__h .ip { margin-left: auto; font-family: var(--mono); font-size: 14px; color: var(--ink-soft); }
+  .ipcard__h .ip { margin-left: auto; font-family: var(--mono); font-size: 14px; color: var(--ink-soft); overflow-wrap: anywhere; text-align: right; }
   .meter { display: flex; flex-direction: column; gap: 9px; margin-bottom: 20px; max-width: 620px; }
   .meter__top { display: flex; align-items: baseline; gap: 10px; }
   .meter__top .lbl { font-family: var(--mono); font-size: 12.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-faint); }
@@ -186,6 +192,7 @@
   .meter__fill { height: 100%; width: 0; background: var(--mcolor, var(--accent)); border-radius: 999px; transition: width .9s cubic-bezier(.2,.7,.2,1); }
   .dims { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
   @media (max-width: 860px) { .dims { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 520px) { .dims { grid-template-columns: 1fr; } }
   .dim { border: 1px solid var(--line); border-radius: 12px; padding: 14px 15px; background: var(--surface); }
   .dim .dl { font-size: 12px; color: var(--ink-faint); font-family: var(--mono); letter-spacing: .03em; }
   .dim .dv { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 16px; margin-top: 5px; }
@@ -259,6 +266,7 @@
   .term__bar .traffic i:nth-child(1){ background:#ff5f57; } .term__bar .traffic i:nth-child(2){ background:#febc2e; } .term__bar .traffic i:nth-child(3){ background:#28c840; }
   .term__bar .path { font-family: var(--mono); font-size: 12.5px; color: #93A69C; }
   .term pre { margin: 0; padding: 20px; overflow-x: auto; font-family: var(--mono); font-size: 13.5px; line-height: 1.75; color: #E9F1EC; }
+  @media (max-width: 640px) { .term pre { padding: 16px; font-size: 12.5px; line-height: 1.65; } }
   .c-comment { color: #6E8078; } .c-cmd { color: #86F5CD; font-weight: 600; } .c-ok { color: #34D399; } .c-warn { color: #F0B429; } .c-risk { color: #FF5B60; } .c-dim { color: #93A69C; }
   .cli-copy h3 { font-family: var(--sans); font-weight: 700; font-size: 21px; margin: 0 0 10px; letter-spacing: -.02em; }
   .cli-copy p { color: var(--ink-soft); font-size: 15.5px; line-height: 1.6; margin: 0 0 18px; }
@@ -343,7 +351,7 @@
           </div>
         </div>
         <div class="result__foot">
-          <span data-i18n="foot2.note">真正的封号向量（凭证 / 中转 / 客户端）浏览器看不到，需本地命令行。</span>
+          <span data-i18n="foot2.note">真正的封号向量（凭证 / 中转 / 客户端）浏览器看不到，需本地命令行；浏览器侧通过也不等于保证不封。</span>
           <span class="spacer" style="flex:1"></span>
           <a class="btn on-hero" href="#cli" data-i18n="foot2.cta">↓ 深度体检</a>
         </div>
@@ -507,7 +515,7 @@
       'g.den':'/ 100 浏览器暴露度','g.scan':'扫描中','sig2.h':'检出信号',
       'ip.h':'IP 画像','ip.sub':'对 Cloudflare 风控最关键的维度 · 免 key 实时','ip.loading':'正在读取出口 IP 画像…',
       'ex.sum':'这个分数是怎么算出来的？',
-      'ex.body':'<b>浏览器暴露度</b>是 0–100 的分数，衡量“从浏览器这一侧能看到的暴露/风控面”——<b>不是封号概率</b>。真正的封号向量（凭证、中转、客户端）浏览器看不到，要用命令行体检。'
+      'ex.body':'<b>浏览器暴露度</b>是 0–100 的分数，衡量“从浏览器这一侧能看到的暴露/风控面”——<b>不是封号概率，也不能保证账号不会被封</b>。真正的封号向量（凭证、中转、客户端）浏览器看不到，要用命令行体检。'
         +'<ul><li><span class="k info">0–30 低</span> 环境干净，未见明显暴露信号。</li>'
         +'<li><span class="k warn">31–60 中</span> 有可改善项，多为访问/信誉类。</li>'
         +'<li><span class="k risk">61–100 高</span> 有强暴露信号（如不支持地区）。</li></ul>'
@@ -516,7 +524,7 @@
         +'<li><b>访问/信誉</b>：机房 IP、VPN/代理、IP 滥用信誉——影响 claude.ai 登录会不会被 Cloudflare 拦，属“访问受阻”而非“账号被封”。</li>'
         +'<li><b>画像因子</b>：如系统时区，历史上曾被用作标记、当前不编码，几乎不计分、仅提示。</li></ul>'
         +'<b>IP 信誉（纯净度）</b>来自 ipapi.is 的 abuser_score：越满越干净，越低越可能被风控系统标记。',
-      'foot2.note':'真正的封号向量（凭证 / 中转 / 客户端）浏览器看不到，需本地命令行。','foot2.cta':'↓ 深度体检',
+      'foot2.note':'真正的封号向量（凭证 / 中转 / 客户端）浏览器看不到，需本地命令行；浏览器侧通过也不等于保证不封。','foot2.cta':'↓ 深度体检',
       'detect.brow':'检测覆盖','detect.h2':'官方明禁、社区实测、红蓝推演，一次查清',
       'detect.p':'封号很少只有一个原因。Claude Doctor 把三类信号分开测、分层记：官方条款里写死的红线、社区反复报告的高风险行为、以及从风控与红蓝对抗角度可推断的暴露面。每条都标因果与置信度。',
       'd1.h':'凭证与中转','d1.p':'订阅 OAuth 凭证是否脱离官方客户端、经非官方中转/镜像使用——目前唯一被官方证实的封号因果。裸 API key 与订阅凭证区别对待，不误报。',
@@ -553,7 +561,7 @@
       'g.den':'/ 100 browser exposure','g.scan':'scanning','sig2.h':'Detected signals',
       'ip.h':'IP profile','ip.sub':'the dimensions Cloudflare cares about · keyless, live','ip.loading':'reading your egress IP profile…',
       'ex.sum':'How is this score calculated?',
-      'ex.body':'<b>Browser exposure</b> is a 0–100 score for how exposed/flaggable you look <em>from the browser side</em> — it is <b>not a ban probability</b>. The real ban vectors (credentials, relays, client) are invisible to a browser; use the CLI for those.'
+      'ex.body':'<b>Browser exposure</b> is a 0–100 score for how exposed/flaggable you look <em>from the browser side</em> — it is <b>not a ban probability and cannot guarantee safety from enforcement</b>. The real ban vectors (credentials, relays, client) are invisible to a browser; use the CLI for those.'
         +'<ul><li><span class="k info">0–30 low</span> clean environment, no obvious exposure.</li>'
         +'<li><span class="k warn">31–60 medium</span> improvable signals, mostly access/reputation.</li>'
         +'<li><span class="k risk">61–100 high</span> strong exposure (e.g. unsupported region).</li></ul>'
@@ -562,7 +570,7 @@
         +'<li><b>Access/reputation</b>: datacenter IP, VPN/proxy, IP abuse reputation — these affect whether claude.ai login is blocked by Cloudflare (access denied, not a ban).</li>'
         +'<li><b>Profile factor</b>: e.g. system timezone — historically a marker input, not encoded now, near-zero weight, shown for info only.</li></ul>'
         +'<b>IP reputation (purity)</b> comes from ipapi.is abuser_score: fuller = cleaner, lower = more likely flagged by risk systems.',
-      'foot2.note':'The real ban vectors (credentials / relays / client) are invisible to a browser — that needs the local CLI.','foot2.cta':'↓ Deep exam',
+      'foot2.note':'The real ban vectors (credentials / relays / client) are invisible to a browser — that needs the local CLI. A passing browser scan is not a guarantee against bans.','foot2.cta':'↓ Deep exam',
       'detect.brow':'What it checks','detect.h2':'Official policy, community reports, red-team inference — one pass',
       'detect.p':'A ban rarely has a single cause. Claude Doctor separates three signal classes and tiers them: the red lines written into official policy, the high-risk behaviors the community keeps reporting, and the exposure surface you can infer from fraud-detection and red-team reasoning. Each is labeled with causality and confidence.',
       'd1.h':'Credentials & relays','d1.p':'Whether a subscription OAuth credential is used outside the official client via a relay/mirror — the one officially-confirmed ban cause. API keys and subscription creds are treated differently, so no false alarms.',

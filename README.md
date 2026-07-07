@@ -1,6 +1,9 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/diguike/claudedoctor/main/packages/web/public/og.png" alt="Claude Doctor · 克劳德医生" width="760" />
+<picture>
+  <source srcset="https://raw.githubusercontent.com/diguike/claudedoctor/main/packages/web/public/og.svg" type="image/svg+xml" />
+  <img src="https://raw.githubusercontent.com/diguike/claudedoctor/main/packages/web/public/og.png" alt="Claude Doctor · 克劳德医生" width="1200" />
+</picture>
 
 # 🩺 Claude Doctor · 克劳德医生
 
@@ -36,6 +39,8 @@ claudedoctor verify          # byte-level re-check of the date line + re-run
 ```
 
 Exit code: `0` healthy · `1` attention · `2` at-risk. Add `--json` for machine-readable output.
+
+Passing a check does **not** guarantee a Claude Code account will never be restricted. It means this tool did not find any **known, high-confidence** risk vectors in the dimensions it can actually observe.
 
 ## 🩺 What it does
 
@@ -103,7 +108,7 @@ claudedoctor verify          # 字节级复检日期行 + 复跑体检
 
 命令行给**本地 Claude Code**（终端进程）体检；Web 端给**浏览器 Claude** 体检，作科普与引流。
 **默认 100% 本地**，不上传任何环境数据；凭证只做分类，原文永不外泄。只帮真实用户降低误伤，
-不做指纹伪造 / 号池规避等 sketchy 功能。
+不做指纹伪造 / 号池规避 / 封禁规避 这类 sketchy 功能。
 
 ## License
 
