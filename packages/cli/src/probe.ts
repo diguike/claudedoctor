@@ -13,7 +13,10 @@
  * Any probe discloses your egress IP to the chosen provider; the caller surfaces that.
  */
 import { KNOWN_UNSUPPORTED_REGIONS, type NetworkInfo } from '@claudedoctor/core';
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 
 type IpFamily = 'ipv4' | 'ipv6';
 type ProbeResult = NonNullable<NetworkInfo['families']>[IpFamily];
@@ -32,15 +35,20 @@ async function fetchJson<T>(url: string, timeoutMs: number): Promise<T | null> {
   }
 }
 
-function fetchJsonViaCurl<T>(url: string, timeoutMs: number, family: IpFamily): T | null {
+/**
+ * Force an address family via curl's -4/-6 (Node fetch can't). ASYNC (execFile,
+ * not execFileSync) so the IPv4 + IPv6 probes in Promise.all actually run
+ * concurrently instead of blocking the event loop one after another.
+ */
+async function fetchJsonViaCurl<T>(url: string, timeoutMs: number, family: IpFamily): Promise<T | null> {
   try {
     const seconds = Math.max(1, Math.ceil(timeoutMs / 1000));
-    const out = execFileSync(
+    const { stdout } = await execFileAsync(
       'curl',
       ['-fsSL', family === 'ipv4' ? '-4' : '-6', '--connect-timeout', String(seconds), '--max-time', String(seconds), url],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+      { encoding: 'utf8' },
     );
-    return JSON.parse(out) as T;
+    return JSON.parse(stdout) as T;
   } catch {
     return null;
   }
@@ -72,7 +80,7 @@ interface IpApiIsResponse {
 
 async function probeIpApiIs(timeoutMs: number, family?: IpFamily): Promise<ProbeResult> {
   const d = family
-    ? fetchJsonViaCurl<IpApiIsResponse>('https://api.ipapi.is/', timeoutMs, family)
+    ? await fetchJsonViaCurl<IpApiIsResponse>('https://api.ipapi.is/', timeoutMs, family)
     : await fetchJson<IpApiIsResponse>('https://api.ipapi.is/', timeoutMs);
   if (!d || !d.location?.country_code) return null;
   const cc = d.location.country_code.toUpperCase();
@@ -115,7 +123,7 @@ interface IpDataResponse {
 
 async function probeIpData(apiKey: string, timeoutMs: number, family?: IpFamily): Promise<ProbeResult> {
   const url = `https://api.ipdata.co/?api-key=${encodeURIComponent(apiKey)}`;
-  const d = family ? fetchJsonViaCurl<IpDataResponse>(url, timeoutMs, family) : await fetchJson<IpDataResponse>(url, timeoutMs);
+  const d = family ? await fetchJsonViaCurl<IpDataResponse>(url, timeoutMs, family) : await fetchJson<IpDataResponse>(url, timeoutMs);
   if (!d || d.message || !d.country_code) return null;
   const cc = d.country_code.toUpperCase();
   const th = d.threat ?? {};
@@ -153,7 +161,7 @@ interface IpApiResponse {
 
 async function probeIpApi(timeoutMs: number, family?: IpFamily): Promise<ProbeResult> {
   const url = 'http://ip-api.com/json/?fields=status,country,countryCode,isp,org,as,proxy,hosting,mobile,query';
-  const d = family ? fetchJsonViaCurl<IpApiResponse>(url, timeoutMs, family) : await fetchJson<IpApiResponse>(url, timeoutMs);
+  const d = family ? await fetchJsonViaCurl<IpApiResponse>(url, timeoutMs, family) : await fetchJson<IpApiResponse>(url, timeoutMs);
   if (!d || d.status !== 'success') return null;
   const cc = d.countryCode ? d.countryCode.toUpperCase() : null;
   return {

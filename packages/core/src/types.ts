@@ -150,8 +150,6 @@ export interface DoctorInput {
       claudeRuleTarget: string | null;
       finalMatchTarget: string | null;
       aiGroupMembers: string[];
-      aiGenericMembers: string[];
-      aiDedicatedMembers: string[];
     };
     systemProxy: {
       enabled: boolean;

@@ -99,9 +99,16 @@ function detectClient(): { version: string | null; isOfficialBinary: boolean; in
   return { version, isOfficialBinary: version != null, installMethod };
 }
 
+/**
+ * Run a simple no-shell command (space-split argv). Avoids spawning a login
+ * shell (`/bin/zsh -lc` sourced rc files, added latency, and broke on non-zsh
+ * platforms); these commands (ps/ifconfig/netstat/scutil) need no shell features.
+ */
 function sh(cmd: string): string {
+  const [bin, ...args] = cmd.split(/\s+/);
+  if (!bin) return '';
   try {
-    return execFileSync('/bin/zsh', ['-lc', cmd], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    return execFileSync(bin, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch {
     return '';
   }
@@ -159,44 +166,48 @@ function detectClashConfig(psOut: string): NonNullable<NonNullable<DoctorInput['
       claudeRuleTarget: null,
       finalMatchTarget: null,
       aiGroupMembers: [],
-      aiGenericMembers: [],
-      aiDedicatedMembers: [],
     };
   }
 
-  const groupSection = text.match(/^- name:\s*ClaudeCode[\s\S]*?(?=^- name:|^rules:|\Z)/m)?.[0] ?? '';
+  // Real Clash/mihomo configs indent list items (`  - name: …`) under
+  // proxy-groups:/rules:, and a section may be the LAST block in the file — so
+  // every anchor tolerates leading whitespace and terminates on a top-level key
+  // (`^\S`) or true end-of-input (`(?![\s\S])`), never the bogus `\Z`.
+  const section = (key: string): string =>
+    text.match(new RegExp(`^${key}:[\\s\\S]*?(?=^\\S|(?![\\s\\S]))`, 'm'))?.[0] ?? '';
+  const dnsSection = section('dns');
+  const tunSection = section('tun');
+
+  const groupSection =
+    text.match(/^\s*-\s*name:\s*["']?ClaudeCode\b[\s\S]*?(?=^\s*-\s*name:|^\S|(?![\s\S]))/m)?.[0] ?? '';
   const proxySubsection = groupSection.match(/^\s*proxies:\s*$([\s\S]*)/m)?.[1] ?? '';
-  const aiGroupMembers = Array.from(proxySubsection.matchAll(/^\s*-\s+(.+)\s*$/gm))
+  const aiGroupMembers = Array.from(proxySubsection.matchAll(/^\s*-\s+(.+?)\s*$/gm))
     .map((x) => x[1]!.trim())
     .filter((x) => x.length > 0);
-  const aiGenericMembers = aiGroupMembers.filter((x) => /(自动选择|故障转移|fallback|url-test|select|淘\|加\|速)/i.test(x));
-  const aiDedicatedMembers = aiGroupMembers.filter((x) => !aiGenericMembers.includes(x));
   const claudeRuleTarget =
-    text.match(/^- DOMAIN-SUFFIX,anthropic\.com,([^\s]+)\s*$/m)?.[1] ??
-    text.match(/^- DOMAIN-SUFFIX,claude\.ai,([^\s]+)\s*$/m)?.[1] ??
+    text.match(/^\s*-\s*DOMAIN-SUFFIX,anthropic\.com,([^\s,]+)/m)?.[1] ??
+    text.match(/^\s*-\s*DOMAIN-SUFFIX,claude\.(?:ai|com),([^\s,]+)/m)?.[1] ??
     null;
-  const finalMatchTarget = Array.from(text.matchAll(/^- MATCH,([^\s]+)\s*$/gm)).at(-1)?.[1] ?? null;
+  const finalMatchTarget = Array.from(text.matchAll(/^\s*-\s*MATCH,([^\s,]+)/gm)).at(-1)?.[1] ?? null;
 
   return {
     configPath,
     mode: strYaml(text, 'mode'),
     mixedPort: numYaml(text, 'mixed-port'),
     ipv6: boolYaml(text, 'ipv6'),
-    dnsEnabled: boolYaml(text.match(/^dns:[\s\S]*?(?=^[a-z-]+:|\Z)/m)?.[0] ?? '', 'enable'),
-    dnsIpv6: boolYaml(text.match(/^dns:[\s\S]*?(?=^[a-z-]+:|\Z)/m)?.[0] ?? '', 'ipv6'),
-    dnsEnhancedMode: strYaml(text.match(/^dns:[\s\S]*?(?=^[a-z-]+:|\Z)/m)?.[0] ?? '', 'enhanced-mode'),
-    dnsRespectRules: boolYaml(text.match(/^dns:[\s\S]*?(?=^[a-z-]+:|\Z)/m)?.[0] ?? '', 'respect-rules'),
-    tunEnabled: boolYaml(text.match(/^tun:[\s\S]*?(?=^[a-z-]+:|\Z)/m)?.[0] ?? '', 'enable'),
-    tunStack: strYaml(text.match(/^tun:[\s\S]*?(?=^[a-z-]+:|\Z)/m)?.[0] ?? '', 'stack'),
-    tunAutoRoute: boolYaml(text.match(/^tun:[\s\S]*?(?=^[a-z-]+:|\Z)/m)?.[0] ?? '', 'auto-route'),
-    tunStrictRoute: boolYaml(text.match(/^tun:[\s\S]*?(?=^[a-z-]+:|\Z)/m)?.[0] ?? '', 'strict-route'),
-    hasClaudeCodeGroup: /(^|\n)- name:\s*ClaudeCode\s*$/m.test(text),
-    hasClaudeRules: /- DOMAIN-SUFFIX,anthropic\.com,/.test(text) || /- DOMAIN-SUFFIX,claude\.ai,/.test(text),
+    dnsEnabled: boolYaml(dnsSection, 'enable'),
+    dnsIpv6: boolYaml(dnsSection, 'ipv6'),
+    dnsEnhancedMode: strYaml(dnsSection, 'enhanced-mode'),
+    dnsRespectRules: boolYaml(dnsSection, 'respect-rules'),
+    tunEnabled: boolYaml(tunSection, 'enable'),
+    tunStack: strYaml(tunSection, 'stack'),
+    tunAutoRoute: boolYaml(tunSection, 'auto-route'),
+    tunStrictRoute: boolYaml(tunSection, 'strict-route'),
+    hasClaudeCodeGroup: /^\s*-\s*name:\s*["']?ClaudeCode\b/m.test(text),
+    hasClaudeRules: /^\s*-\s*DOMAIN-SUFFIX,(?:anthropic\.com|claude\.(?:ai|com)),/m.test(text),
     claudeRuleTarget,
     finalMatchTarget,
     aiGroupMembers,
-    aiGenericMembers,
-    aiDedicatedMembers,
   };
 }
 
@@ -210,7 +221,7 @@ function detectLocalProxy(): NonNullable<DoctorInput['localProxy']> {
     'all_proxy',
   ].some((k) => Boolean(process.env[k]));
 
-  const psOut = sh('ps aux');
+  const psOut = sh('ps auxww'); // ww = unlimited width, so long config paths aren't truncated
   const apps = COMMON_PROXY_APPS.filter(({ pattern }) => pattern.test(psOut)).map(({ label }) => label);
   const clash = detectClashConfig(psOut);
 

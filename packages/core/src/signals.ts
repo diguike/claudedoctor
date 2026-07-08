@@ -21,7 +21,7 @@ function familyBreakdown(i: NonNullable<DoctorInput['network']>): string {
 }
 
 function splitAiGroupMembers(members: string[]): { generic: string[]; dedicated: string[] } {
-  const generic = members.filter((x) => /(自动选择|故障转移|fallback|url-test|select|淘\|加\|速)/i.test(x));
+  const generic = members.filter((x) => /(自动选择|故障转移|自动回退|fallback|url-test|load-balance|select|直连|拒绝|DIRECT|REJECT)/i.test(x));
   const dedicated = members.filter((x) => !generic.includes(x));
   return { generic, dedicated };
 }
