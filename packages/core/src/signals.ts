@@ -20,6 +20,282 @@ function familyBreakdown(i: NonNullable<DoctorInput['network']>): string {
   return entries.length >= 2 ? `；双栈：${entries.join('；')}` : '';
 }
 
+function splitAiGroupMembers(members: string[]): { generic: string[]; dedicated: string[] } {
+  const generic = members.filter((x) => /(自动选择|故障转移|fallback|url-test|select|淘\|加\|速)/i.test(x));
+  const dedicated = members.filter((x) => !generic.includes(x));
+  return { generic, dedicated };
+}
+
+/** L0 — local proxy client presence. Informational only; helps explain later path findings. */
+const proxyClient: Detector = (i) => {
+  const lp = i.localProxy;
+  if (!lp || lp.apps.length === 0) return null;
+  return {
+    id: 'L0-proxy-client',
+    title: '本地代理客户端',
+    status: 'info',
+    confidence: 'reported',
+    causal: false,
+    scored: false,
+    summary: `检测到常见代理软件：${lp.apps.join(' / ')}`,
+    detail:
+      `本机存在代理客户端进程。仅有客户端本身不说明路径一定正确，真正关键的是：` +
+      `命令行工具是否也被代理接管、IPv6 是否被接管、系统代理/TUN/环境变量三者是否一致。`,
+    evidence: [SOURCES.networkLedger],
+  };
+};
+
+/** L1 — local proxy hijack mode for Node/CLI tools. */
+const proxyHijack: Detector = (i) => {
+  const lp = i.localProxy;
+  if (!lp) return null;
+  const sys = lp.systemProxy;
+  const tun = lp.tun;
+  const proxyTarget = sys.host && sys.port ? `${sys.host}:${sys.port}` : sys.host ?? '已启用';
+  const tunOk = tun.defaultIpv4ViaTun || tun.splitDefaultIpv4;
+
+  if (sys.enabled && !lp.envProxySet && !tunOk) {
+    return {
+      id: 'L1-proxy-hijack',
+      title: '命令行代理接管',
+      status: 'warn',
+      confidence: 'reported',
+      causal: true,
+      scored: false,
+      classLabel: '路径卫生',
+      summary: `检测到系统代理（${proxyTarget}），但未见 TUN 或命令行代理环境变量 — Node/CLI 可能绕过代理直连`,
+      detail:
+        `很多用户只开了系统代理，浏览器能出海，但 Node/CLI 进程未必会自动继承。当前本机未见 ` +
+        `HTTP(S)_PROXY/ALL_PROXY，也未见 IPv4 被 TUN/分流默认路由接管；对 Claude Code 这类终端工具来说，` +
+        `这属于高频踩坑的路径卫生问题。`,
+      evidence: [SOURCES.networkLedger],
+      fix: {
+        kind: 'network',
+        title: '优先开 TUN；否则给命令行显式设置代理环境变量',
+        commands: [
+          'export HTTP_PROXY=http://127.0.0.1:<port>',
+          'export HTTPS_PROXY=http://127.0.0.1:<port>',
+          'export ALL_PROXY=socks5h://127.0.0.1:<port>',
+        ],
+        note: '系统代理只保证一部分 GUI 流量；对 Node/CLI 更稳的是 TUN，或者给目标 shell 显式设置代理环境变量。',
+      },
+    };
+  }
+
+  if (sys.enabled || lp.envProxySet || tun.present) {
+    const parts = [
+      sys.enabled ? `system proxy=${proxyTarget}` : null,
+      lp.envProxySet ? 'env proxy=on' : 'env proxy=off',
+      tun.present ? `TUN=${tun.utunInterfaces.join(',')}` : 'TUN=off',
+    ].filter(Boolean);
+    return {
+      id: 'L1-proxy-hijack',
+      title: '命令行代理接管',
+      status: 'ok',
+      confidence: 'reported',
+      causal: true,
+      scored: false,
+      classLabel: '路径卫生',
+      summary: `本地代理接管形态：${parts.join(' · ')}`,
+      detail:
+        '这条是路径卫生自检，不代表地区一定合规；真正出口结果仍以 `--net` 的双栈与运行时探测为准。',
+      evidence: [SOURCES.networkLedger],
+    };
+  }
+  return null;
+};
+
+/** L2 — IPv6 capture hygiene. */
+const ipv6Hijack: Detector = (i) => {
+  const lp = i.localProxy;
+  if (!lp) return null;
+  const sys = lp.systemProxy;
+  const tun = lp.tun;
+  if (!tun.hasIpv6DefaultRoute) return null;
+
+  const v6Ok = lp.envProxySet || tun.defaultIpv6ViaTun || tun.splitDefaultIpv6;
+  if ((sys.enabled || tun.present) && !v6Ok) {
+    return {
+      id: 'L2-ipv6-hijack',
+      title: 'IPv6 接管',
+      status: 'warn',
+      confidence: 'reported',
+      causal: true,
+      scored: false,
+      classLabel: '路径卫生',
+      summary: '本机有 IPv6 默认路由，但未见 IPv6 被 TUN/ALL_PROXY 接管 — 双栈环境可能出现 IPv6 直连',
+      detail:
+        '很多代理配置只照顾 IPv4，或者只开系统代理不接管 IPv6。这样浏览器/CLI 在双栈环境里可能出现：IPv4 走代理、IPv6 直连，' +
+        '最终导致地区判断、可达性或出口信誉与预期不一致。',
+      evidence: [SOURCES.networkLedger],
+      fix: {
+        kind: 'network',
+        title: '确保 IPv6 也被代理接管',
+        commands: [],
+        note: '优先使用支持 IPv6 接管的 TUN 模式；若不用 TUN，至少确认目标命令通过 HTTP(S)_PROXY/ALL_PROXY 走代理。',
+      },
+    };
+  }
+
+  if (sys.enabled || tun.present) {
+    return {
+      id: 'L2-ipv6-hijack',
+      title: 'IPv6 接管',
+      status: 'info',
+      confidence: 'reported',
+      causal: true,
+      scored: false,
+      classLabel: '路径卫生',
+      summary: v6Ok ? '检测到 IPv6 已被 TUN 或代理环境变量接管' : '未发现 IPv6 默认路由',
+      evidence: [SOURCES.networkLedger],
+    };
+  }
+  return null;
+};
+
+/** L3 — Clash/Mihomo core mode/TUN/DNS hygiene. */
+const clashMode: Detector = (i) => {
+  const c = i.localProxy?.clash;
+  if (!c) return null;
+
+  const issues: string[] = [];
+  if (c.mode && c.mode !== 'rule') issues.push(`mode=${c.mode}`);
+  if (c.tunEnabled === false) issues.push('tun=off');
+  if (c.ipv6 === false) issues.push('ipv6=off');
+  if (c.dnsEnabled === false) issues.push('dns=off');
+  if (c.dnsEnhancedMode && c.dnsEnhancedMode !== 'fake-ip') issues.push(`dns=${c.dnsEnhancedMode}`);
+  if (c.dnsRespectRules === false) issues.push('dns.respect-rules=off');
+
+  if (issues.length > 0) {
+    return {
+      id: 'L3-clash-mode',
+      title: 'Clash 配置质量',
+      status: 'warn',
+      confidence: 'reported',
+      causal: true,
+      scored: false,
+      classLabel: '路径卫生',
+      summary: `Clash/Mihomo 关键项需留意：${issues.join(' · ')}`,
+      detail:
+        `对终端 AI 工具更关键的不是“开没开代理”，而是配置是否适合命令行与双栈场景。通常更稳的组合是 ` +
+        `mode=rule、tun.enable=true、ipv6=true、dns.enable=true、enhanced-mode=fake-ip、respect-rules=true。` +
+        `${c.configPath ? `当前配置文件：${c.configPath}` : ''}`,
+      evidence: [SOURCES.networkLedger],
+      fix: {
+        kind: 'network',
+        title: '把 Clash/Mihomo 调成适合命令行工具的模式',
+        commands: [],
+        note: '优先检查 mode=rule、tun.enable=true、ipv6=true、dns.enhanced-mode=fake-ip、dns.respect-rules=true。',
+      },
+    };
+  }
+
+  return {
+    id: 'L3-clash-mode',
+    title: 'Clash 配置质量',
+    status: 'ok',
+    confidence: 'reported',
+    causal: true,
+    scored: false,
+    classLabel: '路径卫生',
+    summary: `Clash/Mihomo 关键项看起来正常：mode=${c.mode ?? '—'} · tun=${String(c.tunEnabled)} · ipv6=${String(c.ipv6)} · dns=${c.dnsEnhancedMode ?? '—'}`,
+    detail: c.configPath ? `当前配置文件：${c.configPath}` : undefined,
+    evidence: [SOURCES.networkLedger],
+  };
+};
+
+/** L4 — explicit Claude/Anthropic routing in Clash/Mihomo rules. */
+const clashClaudeRules: Detector = (i) => {
+  const c = i.localProxy?.clash;
+  if (!c) return null;
+
+  if (!c.hasClaudeCodeGroup || !c.hasClaudeRules) {
+    return {
+      id: 'L4-clash-claude-rules',
+      title: 'Claude 专用规则',
+      status: 'warn',
+      confidence: 'reported',
+      causal: true,
+      scored: false,
+      classLabel: '路径卫生',
+      summary: '未检测到明确的 Claude/Anthropic 专用规则与分组 — AI 流量更容易落到通用出口',
+      detail:
+        '如果没有把 anthropic.com / claude.ai / claude.com 等流量单独送到一个可控分组，最终很可能跟着通用 MATCH 或大组走，' +
+        '导致地区、机房属性和稳定性都不可控。',
+      evidence: [SOURCES.networkLedger],
+      fix: {
+        kind: 'network',
+        title: '给 Claude/Anthropic 单独建规则组',
+        commands: [],
+        note: '至少单独匹配 anthropic.com、claude.ai、claude.com，并让它们落到一个可单独选节点的专用组。',
+      },
+    };
+  }
+
+  const target = c.claudeRuleTarget ?? 'ClaudeCode';
+  const members = c.aiGroupMembers.slice(0, 4).join(' / ');
+  return {
+    id: 'L4-clash-claude-rules',
+    title: 'Claude 专用规则',
+    status: 'ok',
+    confidence: 'reported',
+    causal: true,
+    scored: false,
+    classLabel: '路径卫生',
+    summary: `已检测到 Claude 专用规则：AI 域名 → ${target}${members ? ` · 候选节点: ${members}` : ''}`,
+    detail:
+      c.finalMatchTarget && c.finalMatchTarget !== target
+        ? `Claude 流量不会直接掉到最终 MATCH=${c.finalMatchTarget}，而是先走专用组 ${target}。`
+        : undefined,
+    evidence: [SOURCES.networkLedger],
+  };
+};
+
+/** L5 — ClaudeCode group exit stability. */
+const clashAiExit: Detector = (i) => {
+  const c = i.localProxy?.clash;
+  if (!c || !c.hasClaudeCodeGroup) return null;
+
+  const { generic, dedicated } = splitAiGroupMembers(c.aiGroupMembers);
+  if (generic.length > 0 && dedicated.length <= 1) {
+    return {
+      id: 'L5-clash-ai-exit',
+      title: 'Claude 出口稳定性',
+      status: 'warn',
+      confidence: 'reported',
+      causal: true,
+      scored: false,
+      classLabel: '路径卫生',
+      summary: `ClaudeCode 组混入通用出口：${generic.join(' / ')}；专用候选过少，AI 流量容易漂移`,
+      detail:
+        `虽然已经有 Claude 专用规则，但如果专用组里主要还是“自动选择 / 故障转移 / 通用大组”，` +
+        `那么真实出口仍会随着测速、故障切换或全局选择漂移。对 Claude Code 来说，更稳的是把 AI 流量固定到少量可控候选。`,
+      evidence: [SOURCES.networkLedger],
+      fix: {
+        kind: 'network',
+        title: '把 ClaudeCode 组收窄成少量可控候选',
+        commands: [],
+        note: '建议 ClaudeCode 组只放 1-3 个明确候选节点，少依赖自动选择/故障转移/通用大组。',
+      },
+    };
+  }
+
+  return {
+    id: 'L5-clash-ai-exit',
+    title: 'Claude 出口稳定性',
+    status: 'info',
+    confidence: 'reported',
+    causal: true,
+    scored: false,
+    classLabel: '路径卫生',
+    summary:
+      dedicated.length > 0
+        ? `ClaudeCode 组含专用候选：${dedicated.slice(0, 3).join(' / ')}${generic.length ? `；另含通用候选 ${generic.join(' / ')}` : ''}`
+        : 'ClaudeCode 组未发现明确专用候选',
+    evidence: [SOURCES.networkLedger],
+  };
+};
+
 /**
  * A1 — base URL + credential type. The single confirmed causal axis: a
  * *subscription OAuth* credential leaving the official client (via a relay) is
@@ -557,6 +833,12 @@ const timezone: Detector = (i) => {
 };
 
 export const DETECTORS: Detector[] = [
+  proxyClient,
+  proxyHijack,
+  ipv6Hijack,
+  clashMode,
+  clashClaudeRules,
+  clashAiExit,
   baseUrl,
   staleApiKey,
   credentialKind,

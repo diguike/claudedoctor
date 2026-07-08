@@ -22,6 +22,12 @@ export type FindingStatus = 'ok' | 'info' | 'warn' | 'risk';
 
 /** Stable signal identifiers — mirror the IDs in docs/ban-signals.md §1. */
 export type SignalId =
+  | 'L0-proxy-client'     // detected local proxy client(s)
+  | 'L1-proxy-hijack'     // system proxy / TUN / env consistency for CLI tools
+  | 'L2-ipv6-hijack'      // IPv6 capture hygiene in dual-stack environments
+  | 'L3-clash-mode'       // Clash/Mihomo mode/tun/dns hygiene
+  | 'L4-clash-claude-rules' // Clash/Mihomo explicit Claude routing rules
+  | 'L5-clash-ai-exit'    // Clash/Mihomo Claude group exit stability
   | 'A1-relay-oauth'      // subscription OAuth routed through a non-official relay
   | 'A1-relay-apikey'     // API key through a relay (allowed — informational)
   | 'A2-credential-share' // credential type / sharing hygiene
@@ -123,6 +129,49 @@ export interface DoctorInput {
     installMethod: string | null;
   };
   proxy: { http: string | null; https: string | null };
+  localProxy?: {
+    apps: string[];
+    envProxySet: boolean;
+    clash?: {
+      configPath: string | null;
+      mode: string | null;
+      mixedPort: number | null;
+      ipv6: boolean | null;
+      dnsEnabled: boolean | null;
+      dnsIpv6: boolean | null;
+      dnsEnhancedMode: string | null;
+      dnsRespectRules: boolean | null;
+      tunEnabled: boolean | null;
+      tunStack: string | null;
+      tunAutoRoute: boolean | null;
+      tunStrictRoute: boolean | null;
+      hasClaudeCodeGroup: boolean;
+      hasClaudeRules: boolean;
+      claudeRuleTarget: string | null;
+      finalMatchTarget: string | null;
+      aiGroupMembers: string[];
+      aiGenericMembers: string[];
+      aiDedicatedMembers: string[];
+    };
+    systemProxy: {
+      enabled: boolean;
+      http: boolean;
+      https: boolean;
+      socks: boolean;
+      pac: boolean;
+      host: string | null;
+      port: number | null;
+    };
+    tun: {
+      present: boolean;
+      utunInterfaces: string[];
+      hasIpv6DefaultRoute: boolean;
+      defaultIpv4ViaTun: boolean;
+      defaultIpv6ViaTun: boolean;
+      splitDefaultIpv4: boolean;
+      splitDefaultIpv6: boolean;
+    };
+  };
   /**
    * Local identity surface — read-only transparency, never uploaded. machineID
    * is a local random install id that (per binary forensics) does NOT go
