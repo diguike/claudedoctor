@@ -1,59 +1,71 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" font-family="-apple-system, Segoe UI, Roboto, PingFang SC, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <defs>
-    <radialGradient id="glow" cx="78%" cy="0%" r="70%">
-      <stop offset="0%" stop-color="#33E6AC" stop-opacity="0.28"/>
-      <stop offset="60%" stop-color="#33E6AC" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="arc" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#34D399"/>
-      <stop offset="55%" stop-color="#F0B429"/>
-      <stop offset="100%" stop-color="#FF5B60"/>
-    </linearGradient>
-    <pattern id="dots" width="30" height="30" patternUnits="userSpaceOnUse">
-      <circle cx="1.4" cy="1.4" r="1.4" fill="#E9F1EC" fill-opacity="0.05"/>
+    <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">
+      <path d="M64 0H0V64" fill="none" stroke="#173128" stroke-width="1"/>
     </pattern>
   </defs>
 
-  <rect width="1200" height="630" fill="#080C0A"/>
-  <rect width="1200" height="630" fill="url(#dots)"/>
-  <rect width="1200" height="630" fill="url(#glow)"/>
-  <rect x="0" y="0" width="1200" height="6" fill="#33E6AC" opacity="0.9"/>
+  <rect width="1200" height="630" fill="#07100C"/>
+  <rect width="1200" height="630" fill="url(#grid)" opacity="0.62"/>
+  <rect width="1200" height="7" fill="#31E6AC"/>
+  <path d="M708 7V630" stroke="#173128" stroke-width="1"/>
 
-  <!-- wordmark -->
-  <g transform="translate(80,92)">
-    <circle cx="16" cy="10" r="15" fill="none" stroke="#33E6AC" stroke-width="3"/>
-    <path d="M16 25 v10 a20 20 0 0 0 40 0 v-8" fill="none" stroke="#33E6AC" stroke-width="3"/>
-    <circle cx="56" cy="25" r="6" fill="#080C0A" stroke="#33E6AC" stroke-width="3"/>
-    <text x="82" y="30" font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="30" font-weight="700" fill="#E9F1EC">claudedoctor<tspan fill="#33E6AC">.</tspan></text>
+  <g transform="translate(76 66)">
+    <circle cx="17" cy="12" r="15" fill="none" stroke="#31E6AC" stroke-width="3"/>
+    <path d="M17 27v10a20 20 0 0 0 40 0v-8" fill="none" stroke="#31E6AC" stroke-width="3"/>
+    <circle cx="57" cy="27" r="6" fill="#07100C" stroke="#31E6AC" stroke-width="3"/>
+    <text x="84" y="32" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="30" font-weight="700" fill="#F2F7F4">claudedoctor<tspan fill="#31E6AC">.</tspan></text>
   </g>
 
-  <!-- headline -->
-  <text x="80" y="250" font-size="66" font-weight="800" letter-spacing="-2" fill="#E9F1EC">你的账号，<tspan fill="#33E6AC">暴露了多少？</tspan></text>
-  <text x="80" y="312" font-size="30" font-weight="600" fill="#93A69C">Claude Code 封禁风险体检 · 只算有因果的信号</text>
+  <text x="76" y="202" font-family="Arial, PingFang SC, Microsoft YaHei, sans-serif" font-size="28" font-weight="700" fill="#31E6AC">CLAUDE CODE 环境体检</text>
+  <text x="76" y="290" font-family="Arial, PingFang SC, Microsoft YaHei, sans-serif" font-size="66" font-weight="800" fill="#F2F7F4">先看证据，</text>
+  <text x="76" y="370" font-family="Arial, PingFang SC, Microsoft YaHei, sans-serif" font-size="66" font-weight="800" fill="#31E6AC">再处理风险。</text>
+  <text x="76" y="432" font-family="Arial, PingFang SC, Microsoft YaHei, sans-serif" font-size="27" fill="#9AAFA5">政策风险 · 访问问题 · 环境信息，分开判断</text>
 
-  <!-- tags -->
-  <g font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="20" font-weight="600">
-    <g transform="translate(80,392)">
-      <rect x="0" y="0" width="150" height="42" rx="21" fill="none" stroke="#23302A"/>
-      <text x="24" y="28" fill="#34D399">● 只算因果</text>
-    </g>
-    <g transform="translate(246,392)">
-      <rect x="0" y="0" width="176" height="42" rx="21" fill="none" stroke="#23302A"/>
-      <text x="24" y="28" fill="#F0B429">● 字节级取证</text>
-    </g>
-    <g transform="translate(438,392)">
-      <rect x="0" y="0" width="150" height="42" rx="21" fill="none" stroke="#23302A"/>
-      <text x="24" y="28" fill="#93A69C">● 可复验修复</text>
-    </g>
+  <g font-family="Arial, PingFang SC, Microsoft YaHei, sans-serif" font-size="18" font-weight="700">
+    <rect x="76" y="478" width="126" height="42" rx="6" fill="#10251D" stroke="#285342"/>
+    <circle cx="96" cy="499" r="5" fill="#31E6AC"/>
+    <text x="111" y="506" fill="#D8E6DF">证据优先</text>
+    <rect x="216" y="478" width="126" height="42" rx="6" fill="#241E0D" stroke="#5E4912"/>
+    <circle cx="236" cy="499" r="5" fill="#F5B82E"/>
+    <text x="251" y="506" fill="#E8DDC2">可复检修复</text>
+    <rect x="356" y="478" width="126" height="42" rx="6" fill="#0E2028" stroke="#23495A"/>
+    <circle cx="376" cy="499" r="5" fill="#45A8D8"/>
+    <text x="391" y="506" fill="#D1E3EA">开源透明</text>
   </g>
 
-  <text x="80" y="556" font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="22" fill="#6E8078">开源 · MIT · 证据优先　　npm i -g claudedoctor</text>
+  <text x="76" y="578" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="21" fill="#82958C">npm i -g @diguike/claudedoctor</text>
 
-  <!-- gauge -->
-  <g transform="translate(898,196)">
-    <path d="M0,150 A150,150 0 0 1 300,150" fill="none" stroke="#1E2A24" stroke-width="26" stroke-linecap="round"/>
-    <path d="M0,150 A150,150 0 0 1 232,52" fill="none" stroke="url(#arc)" stroke-width="26" stroke-linecap="round"/>
-    <text x="150" y="150" font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="88" font-weight="700" fill="#E9F1EC" text-anchor="middle">63</text>
-    <text x="150" y="196" font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="22" fill="#93A69C" text-anchor="middle">/ 100 暴露度</text>
+  <g transform="translate(760 82)">
+    <rect width="366" height="466" rx="8" fill="#0D1713" stroke="#2A3A33"/>
+    <text x="28" y="44" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15" font-weight="700" fill="#8CA097">LIVE DIAGNOSTIC</text>
+    <circle cx="334" cy="39" r="5" fill="#31E6AC"/>
+    <path d="M28 68H338" stroke="#24352E"/>
+
+    <text x="28" y="120" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="42" font-weight="800" fill="#F5B82E">ATTENTION</text>
+    <text x="28" y="151" font-family="Arial, PingFang SC, Microsoft YaHei, sans-serif" font-size="18" fill="#9AAFA5">结论按证据等级解释，不输出封禁概率</text>
+
+    <g font-family="Arial, PingFang SC, Microsoft YaHei, sans-serif">
+      <path d="M28 188H338" stroke="#24352E"/>
+      <circle cx="37" cy="222" r="7" fill="#31E6AC"/>
+      <text x="58" y="218" font-size="18" font-weight="700" fill="#ECF3EF">政策风险</text>
+      <text x="58" y="244" font-size="16" fill="#8CA097">凭证与端点按真实优先级判断</text>
+      <text x="310" y="230" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="700" fill="#31E6AC">OK</text>
+
+      <path d="M28 270H338" stroke="#24352E"/>
+      <circle cx="37" cy="304" r="7" fill="#F5B82E"/>
+      <text x="58" y="300" font-size="18" font-weight="700" fill="#ECF3EF">访问 / 信誉</text>
+      <text x="58" y="326" font-size="16" fill="#8CA097">地区、IP 类型与双栈路径</text>
+      <text x="276" y="312" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="700" fill="#F5B82E">CHECK</text>
+
+      <path d="M28 352H338" stroke="#24352E"/>
+      <circle cx="37" cy="386" r="7" fill="#45A8D8"/>
+      <text x="58" y="382" font-size="18" font-weight="700" fill="#ECF3EF">环境信息</text>
+      <text x="58" y="408" font-size="16" fill="#8CA097">检测范围和局限写进结果</text>
+      <text x="286" y="394" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="700" fill="#45A8D8">INFO</text>
+    </g>
+
+    <rect x="28" y="430" width="310" height="1" fill="#24352E"/>
+    <text x="28" y="454" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#71847B">check → fix → verify</text>
   </g>
 </svg>

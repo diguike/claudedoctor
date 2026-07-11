@@ -1,7 +1,7 @@
 {
   "name": "@diguike/claudedoctor",
   "version": "0.2.3",
-  "description": "克劳德医生 · 给 Claude Code 做封禁风险体检的 CLI：检测 → 修复 → 复验。只算有因果的信号，每条带置信度与出处。",
+  "description": "Evidence-first diagnostics for Claude Code credentials, client source, network policy, and configuration hygiene.",
   "type": "module",
   "bin": {
     "claudedoctor": "./bin/claudedoctor.mjs",
@@ -10,7 +10,8 @@
   "files": [
     "dist",
     "bin",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=20"
@@ -19,8 +20,9 @@
     "claude",
     "claude-code",
     "anthropic",
-    "ban-detection",
-    "anti-detection",
+    "diagnostics",
+    "security-audit",
+    "configuration",
     "cli",
     "developer-tools"
   ],
@@ -39,10 +41,13 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "bundle": "rm -rf dist && esbuild src/cli.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/cli.js",
-    "prepack": "pnpm run bundle",
+    "bundle": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && esbuild src/cli.ts --bundle --minify --external:yaml --platform=node --format=esm --target=node20 --outfile=dist/cli.js",
+    "prepack": "npm run bundle",
     "dev": "tsc -p tsconfig.json --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "yaml": "^2.8.1"
   },
   "devDependencies": {
     "@clack/prompts": "^1.7.0",

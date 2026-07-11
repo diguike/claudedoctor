@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/diguike/claudedoctor/security/advisories/new
+    about: Report credential exposure, arbitrary writes, path traversal, or supply-chain issues privately.
+  - name: Anthropic account appeal
+    url: https://support.claude.com/en/articles/8241253-safeguards-warnings-and-appeals
+    about: Claude Doctor cannot recover or appeal an Anthropic account.

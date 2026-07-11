@@ -4,6 +4,7 @@
  */
 import pc from 'picocolors';
 import * as p from '@clack/prompts';
+import { readFileSync } from 'node:fs';
 import { diagnose, type DoctorInput, type Finding } from '@claudedoctor/core';
 import { collect } from './collect.js';
 import { probeNetwork, activeProviderName } from './probe.js';
@@ -12,6 +13,14 @@ import { verifyDateLine } from './verify.js';
 import { applyToProfile, blockLines, detectProfile, revertProfile, sessionScript } from './apply.js';
 
 const BANNER = pc.bold('🩺  Claude Doctor') + pc.dim(' (claudedoctor / cdoc)');
+const VERSION = (() => {
+  try {
+    const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version?: string };
+    return pkg.version ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
+})();
 
 interface Flags {
   why: boolean;
@@ -22,11 +31,25 @@ interface Flags {
   all: boolean;
   session: boolean;
   yes: boolean;
+  help: boolean;
+  version: boolean;
 }
 
-function parseFlags(args: string[]): { rest: string[]; flags: Flags } {
-  const flags: Flags = { why: false, net: false, json: false, revert: false, dryRun: false, all: false, session: false, yes: false };
+export function parseFlags(args: string[]): { rest: string[]; flags: Flags; error: string | null } {
+  const flags: Flags = {
+    why: false,
+    net: false,
+    json: false,
+    revert: false,
+    dryRun: false,
+    all: false,
+    session: false,
+    yes: false,
+    help: false,
+    version: false,
+  };
   const rest: string[] = [];
+  let error: string | null = null;
   for (const a of args) {
     if (a === '--why' || a === '-w') flags.why = true;
     else if (a === '--net' || a === '--online') flags.net = true;
@@ -36,9 +59,20 @@ function parseFlags(args: string[]): { rest: string[]; flags: Flags } {
     else if (a === '--all') flags.all = true;
     else if (a === '--session') flags.session = true;
     else if (a === '--yes' || a === '-y') flags.yes = true;
+    else if (a === '--help' || a === '-h') flags.help = true;
+    else if (a === '--version' || a === '-v') flags.version = true;
+    else if (a.startsWith('-')) error ??= `未知选项: ${a}`;
     else rest.push(a);
   }
-  return { rest, flags };
+  return { rest, flags, error };
+}
+
+function reportJson(dx: ReturnType<typeof diagnose>): object {
+  return { schemaVersion: 1, toolVersion: VERSION, ...dx };
+}
+
+function diagnosisExitCode(dx: ReturnType<typeof diagnose>): number {
+  return dx.summary.riskCount > 0 ? 2 : dx.summary.warnCount > 0 ? 1 : 0;
 }
 
 async function buildInput(flags: Flags): Promise<DoctorInput> {
@@ -53,6 +87,7 @@ async function buildInput(flags: Flags): Promise<DoctorInput> {
       }
     }
     input.network = await probeNetwork();
+    input.networkProbe = input.network ? 'complete' : 'failed';
   }
   return input;
 }
@@ -61,11 +96,11 @@ async function cmdCheck(flags: Flags): Promise<number> {
   const input = await buildInput(flags);
   const dx = diagnose(input);
   if (flags.json) {
-    process.stdout.write(JSON.stringify(dx, null, 2) + '\n');
-    return dx.summary.riskCount > 0 ? 2 : 0;
+    process.stdout.write(JSON.stringify(reportJson(dx), null, 2) + '\n');
+    return diagnosisExitCode(dx);
   }
   process.stdout.write(renderDiagnosis(dx, { why: flags.why }));
-  return dx.summary.riskCount > 0 ? 2 : dx.summary.warnCount > 0 ? 1 : 0;
+  return diagnosisExitCode(dx);
 }
 
 function printManual(manual: Finding[]): void {
@@ -100,7 +135,13 @@ async function cmdFix(flags: Flags): Promise<number> {
   const manual = dx.findings.filter((f) => f.fix && !f.fix.apply);
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify(dx.findings.filter((f) => f.fix), null, 2) + '\n');
+    process.stdout.write(
+      JSON.stringify(
+        { schemaVersion: 1, toolVersion: VERSION, fixes: dx.findings.filter((f) => f.fix) },
+        null,
+        2,
+      ) + '\n',
+    );
     return 0;
   }
 
@@ -127,7 +168,7 @@ async function cmdFix(flags: Flags): Promise<number> {
     // 预览模式（非 TTY 或 --dry-run）：只列，不改
     process.stdout.write(pc.dim('  可自动应用的修复（预览，未改动）:\n'));
     for (const f of auto) {
-      const p2 = f.fix!.precautionary ? pc.dim('（预防性·不提分）') : '';
+      const p2 = f.fix!.precautionary ? pc.dim('（预防性·不改变政策分类）') : '';
       process.stdout.write(`  ${pc.cyan('☐')} ${pc.bold(f.title)} — ${f.fix!.title} ${p2}\n`);
       for (const l of blockLines([f.fix!])) process.stdout.write(pc.dim(`      + ${l}\n`));
     }
@@ -142,7 +183,7 @@ async function cmdFix(flags: Flags): Promise<number> {
       options: auto.map((f, i) => ({
         value: i,
         label: `${f.title} — ${f.fix!.title}`,
-        hint: f.fix!.precautionary ? '预防性 · 不提升风险分' : '有因果 · 可提升健康度',
+        hint: f.fix!.precautionary ? '预防性 · 不改变政策分类' : '有因果 · 可改善健康状态',
       })),
     });
     if (p.isCancel(picked)) {
@@ -180,31 +221,46 @@ async function cmdFix(flags: Flags): Promise<number> {
 
 async function cmdVerify(flags: Flags): Promise<number> {
   // 复诊：字节级复检 M0 的日期行 + 复跑体检。
-  process.stdout.write('\n' + BANNER + pc.bold(' · 复诊') + '\n\n');
+  if (!flags.json) process.stdout.write('\n' + BANNER + pc.bold(' · 复诊') + '\n\n');
   const result = await verifyDateLine();
   if (result) {
-    const clean = result.apostropheHex === '27' && !result.separatorHex.includes('2f');
+    const clean = result.apostropheHex === '27' && result.separatorHex === '2d 2d';
     const icon = clean ? pc.green('✓') : pc.red('✗');
-    process.stdout.write(`   ${icon} 日期行字节复检：${clean ? '干净（ASCII 撇号 + "-" 分隔符）' : '异常，机制可能回归'}\n`);
-    process.stdout.write(pc.dim(`      "${result.text}"\n`));
-    process.stdout.write(pc.dim(`      撇号 hex=${result.apostropheHex}  分隔符 hex=${result.separatorHex}\n\n`));
+    if (!flags.json) {
+      process.stdout.write(`   ${icon} 日期行字节复检：${clean ? '干净（ASCII 撇号 + "-" 分隔符）' : '异常，机制可能回归'}\n`);
+      process.stdout.write(pc.dim(`      "${result.text}"\n`));
+      process.stdout.write(pc.dim(`      撇号 hex=${result.apostropheHex}  分隔符 hex=${result.separatorHex}\n\n`));
+    }
   } else {
-    process.stdout.write(pc.yellow('   ⚠ 未能抓到日期行（claude 未安装/未登录，或代理超时）。本次只复跑体检，不构成完整复诊闭环。\n\n'));
+    if (!flags.json) {
+      process.stdout.write(pc.yellow('   ⚠ 未能抓到日期行（claude 未安装/未登录，或代理超时）。本次只复跑体检，不构成完整复诊闭环。\n\n'));
+    }
   }
   // 复跑体检（把复检到的 dateLine 一并喂给诊断）
   const input = await buildInput(flags);
   if (result) input.dateLine = result;
   const dx = diagnose(input);
+  if (flags.json) {
+    const verification = {
+      status: result
+        ? result.apostropheHex === '27' && result.separatorHex === '2d 2d'
+          ? 'passed'
+          : 'changed'
+        : 'unavailable',
+      dateLine: result,
+    };
+    process.stdout.write(JSON.stringify({ schemaVersion: 1, toolVersion: VERSION, verification, ...dx }, null, 2) + '\n');
+    return result ? diagnosisExitCode(dx) : Math.max(1, diagnosisExitCode(dx));
+  }
   process.stdout.write(renderDiagnosis(dx, { why: flags.why }));
-  return dx.summary.riskCount > 0 ? 2 : 0;
+  return result ? diagnosisExitCode(dx) : Math.max(1, diagnosisExitCode(dx));
 }
 
 function cmdEnv(flags: Flags): number {
   const input = collect();
   // sanitized snapshot — no secrets are present in DoctorInput by construction
-  process.stdout.write('\n' + BANNER + pc.bold(' · 环境快照（脱敏）') + '\n\n');
-  process.stdout.write(JSON.stringify(input, null, 2) + '\n\n');
-  void flags;
+  if (!flags.json) process.stdout.write('\n' + BANNER + pc.bold(' · 环境快照（脱敏）') + '\n\n');
+  process.stdout.write(JSON.stringify(input, null, 2) + (flags.json ? '\n' : '\n\n'));
   return 0;
 }
 
@@ -224,14 +280,40 @@ function printHelp(): void {
       '    --why      展开每条结论的出处与说明\n' +
       '    --net      联网体检出口 IP/地区（会把 IP 告知第三方）\n' +
       '    --json     机器可读输出\n' +
+      '    --version  打印版本\n' +
       '    fix --dry-run/--all/--session/--revert/--yes   修复的几种模式\n\n' +
       pc.dim('  证据账本: docs/ban-signals.md · docs/mechanism.md\n\n'),
   );
 }
 
 export async function main(argv: string[]): Promise<number> {
-  const { rest, flags } = parseFlags(argv);
+  const { rest, flags, error } = parseFlags(argv);
+  if (flags.version) {
+    process.stdout.write(`${VERSION}\n`);
+    return 0;
+  }
+  if (flags.help) {
+    printHelp();
+    return 0;
+  }
+  if (error) {
+    process.stderr.write(pc.red(`${error}\n`));
+    return 64;
+  }
+  if (rest.length > 1) {
+    process.stderr.write(pc.red(`多余参数: ${rest.slice(1).join(' ')}\n`));
+    return 64;
+  }
   const cmd = rest[0] ?? 'check';
+  const fixOnly = flags.revert || flags.dryRun || flags.all || flags.session || flags.yes;
+  if (cmd !== 'fix' && fixOnly) {
+    process.stderr.write(pc.red('选项 --revert/--dry-run/--all/--session/--yes 仅适用于 fix。\n'));
+    return 64;
+  }
+  if (cmd === 'fix' && [flags.revert, flags.dryRun, flags.all, flags.session].filter(Boolean).length > 1) {
+    process.stderr.write(pc.red('fix 的 --revert/--dry-run/--all/--session 不能组合使用。\n'));
+    return 64;
+  }
   switch (cmd) {
     case 'check':
       return cmdCheck(flags);

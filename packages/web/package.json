@@ -2,11 +2,14 @@
   "name": "@claudedoctor/web",
   "version": "0.0.0",
   "private": true,
-  "description": "Claude Doctor web — static preview now; Astro static site to follow (M3).",
+  "description": "Claude Doctor evidence-first browser check and open-source project site.",
   "type": "module",
   "scripts": {
-    "dev": "node serve.mjs",
+    "dev": "pnpm run build && node serve.mjs",
     "preview": "node serve.mjs",
-    "build": "echo \"static page lives in public/; Astro build wiring is the next M3 step\""
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "@claudedoctor/core": "workspace:*"
   }
 }

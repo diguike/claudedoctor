@@ -1,6 +1,6 @@
 # 🩺 claudedoctor · 克劳德医生
 
-> 给 Claude Code 做封禁风险体检的命令行工具：**检测 → 修复 → 复验**。
+> 给 Claude Code 做政策、访问与环境体检的命令行工具：**检测 → 修复 → 复验**。
 > 只碰有因果的信号，每条结论带置信度与出处，诊断都配可复检的修复。不是又一个吓唬人的分数。
 
 [![npm](https://img.shields.io/npm/v/@diguike/claudedoctor?logo=npm&color=CB3837)](https://www.npmjs.com/package/@diguike/claudedoctor)
@@ -27,10 +27,12 @@ claudedoctor env          # 打印脱敏环境快照
 
 ## 它检测什么
 
-- **凭证与中转** — 订阅 OAuth 凭证是否脱离官方客户端、经非官方中转使用（目前唯一被官方证实的封号因果）。
-- **客户端完整性** — 是否官方 Claude Code、有无伪造 header 冒充官方 harness。
-- **出口网络与 IP 画像** — 地区是否受支持、是否机房/代理/VPN/Tor、IP 纯净度；双栈环境会分别探测 IPv4 / IPv6，并按更差路径汇总（`--net`，用免 key 的 ipapi.is，可选 ipdata）。
+- **凭证与中转** — 按官方优先级判断实际认证来源，以及订阅凭证是否被送到非官方端点。
+- **客户端来源** — 识别当前活动命令的官方 native / Homebrew / WinGet / npm 分发路径；不把路径识别冒充签名验证。
+- **出口网络与 IP 画像** — 地区是否受支持、是否机房/代理/VPN/Tor、第三方信誉标签；双栈环境会按实际返回的 IPv4 / IPv6 路径探测并优先展示更需关注的一条（`--net`，用免 key 的 ipapi.is，可选 ipdata）。
 - **设备与遥测透明度、系统时区画像因子** — 如实区分本地 vs 出站，只做可安全获取的部分。
+
+认证优先级覆盖云提供商、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_API_KEY`、`apiKeyHelper`、官方 `CLAUDE_CODE_OAUTH_TOKEN` 和交互登录。`claude setup-token` 是官方支持的 CI/脚本方式，不会被当成自动化违规。
 
 ## 隐私
 
@@ -38,6 +40,6 @@ claudedoctor env          # 打印脱敏环境快照
 
 ## 原则
 
-证据优先、只碰有因果的信号、测对对象（CLI 测终端 / Web 测浏览器）、诊断必配可复检修复。只帮真实用户降低误伤，不做指纹伪造 / 号池规避等 sketchy 功能。
+证据优先、只碰有因果的信号、测对对象（CLI 测终端 / Web 测浏览器）、诊断必配可复检修复。缺失数据不会被当成健康结果。只做合规诊断，不做指纹伪造、号池规避或风控绕过。
 
 MIT © [递归客](https://github.com/diguike) · [源码与文档](https://github.com/diguike/claudedoctor)

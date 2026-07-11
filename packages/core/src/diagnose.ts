@@ -9,7 +9,9 @@ import type { Diagnosis, DoctorInput, Finding, HealthLevel } from './types.js';
 function summarize(findings: Finding[]): Diagnosis['summary'] {
   const scored = findings.filter((f) => f.scored);
   const riskCount = scored.filter((f) => f.status === 'risk').length;
-  const warnCount = scored.filter((f) => f.status === 'warn').length;
+  // WARN always means user action is recommended, even when the issue is
+  // access/path hygiene rather than an account-enforcement vector.
+  const warnCount = findings.filter((f) => f.status === 'warn').length;
   const okCount = findings.filter((f) => f.status === 'ok').length;
   const infoCount = findings.filter((f) => f.status === 'info').length;
 
@@ -20,7 +22,7 @@ function summarize(findings: Finding[]): Diagnosis['summary'] {
     headline = `发现 ${riskCount} 项已确认的封号向量，建议尽快按开药处理`;
   } else if (warnCount > 0) {
     level = 'attention';
-    headline = `有 ${warnCount} 项需要注意（非确定封号，但有因果或卫生问题）`;
+    headline = `有 ${warnCount} 项需要处理（可能是合规、访问或路径卫生问题）`;
   } else {
     level = 'healthy';
     headline = '未见已知高置信封号向量；不等于风险为零';

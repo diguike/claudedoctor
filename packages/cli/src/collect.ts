@@ -5,7 +5,7 @@
  * core stays pure).
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, readdirSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -15,6 +15,7 @@ import {
   type CredentialKind,
   type DoctorInput,
 } from '@claudedoctor/core';
+import { parse as parseYaml } from 'yaml';
 
 const COMMON_PROXY_APPS: Array<{ label: string; pattern: RegExp }> = [
   { label: 'Clash Verge / mihomo', pattern: /(clash-verge|verge-mihomo|mihomo|clashx|clash)/i },
@@ -36,18 +37,79 @@ function readJson(path: string): Record<string, unknown> | null {
   }
 }
 
-/** settings.json `env` block is applied by Claude Code at launch, so it counts too. */
-function settingsEnv(home: string): Record<string, string> {
-  const s = readJson(join(home, '.claude', 'settings.json'));
-  const env = s?.env;
-  return env && typeof env === 'object' ? (env as Record<string, string>) : {};
+interface EffectiveSettings {
+  env: Record<string, string>;
+  managedEnv: Record<string, string>;
+  apiKeyHelper: string | null;
 }
 
-/** Effective value of an env var: process env wins, then settings.json env. */
+function projectRoot(): string {
+  try {
+    return execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 2000,
+    }).trim() || process.cwd();
+  } catch {
+    return process.cwd();
+  }
+}
+
+function managedSettingsPaths(): string[] {
+  const base =
+    platform() === 'darwin'
+      ? '/Library/Application Support/ClaudeCode'
+      : platform() === 'win32'
+        ? join(process.env.ProgramFiles ?? 'C:\\Program Files', 'ClaudeCode')
+        : '/etc/claude-code';
+  const paths = [join(base, 'managed-settings.json')];
+  const dropIn = join(base, 'managed-settings.d');
+  try {
+    for (const file of readdirSync(dropIn).filter((name) => !name.startsWith('.') && name.endsWith('.json')).sort()) {
+      paths.push(join(dropIn, file));
+    }
+  } catch {
+    /* no managed drop-in directory */
+  }
+  return paths;
+}
+
+/** Resolve the settings scopes Claude Code can read locally, low to high. */
+function effectiveSettings(configDir: string): EffectiveSettings {
+  const root = projectRoot();
+  const regularPaths = [
+    join(configDir, 'settings.json'),
+    join(root, '.claude', 'settings.json'),
+    join(root, '.claude', 'settings.local.json'),
+  ];
+  const managedPaths = managedSettingsPaths();
+  const result: EffectiveSettings = { env: {}, managedEnv: {}, apiKeyHelper: null };
+  for (const path of [...regularPaths, ...managedPaths]) {
+    const settings = readJson(path);
+    if (!settings) continue;
+    const env = settings.env;
+    if (env && typeof env === 'object') {
+      for (const [key, value] of Object.entries(env)) {
+        if (typeof value === 'string') {
+          const target = managedPaths.includes(path) ? result.managedEnv : result.env;
+          target[key] = value;
+        }
+      }
+    }
+    if (typeof settings.apiKeyHelper === 'string') result.apiKeyHelper = settings.apiKeyHelper;
+  }
+  return result;
+}
+
+/** Effective value: managed settings, then process env, then local/project/user settings. */
 function effEnv(
   key: string,
   sEnv: Record<string, string>,
+  managedEnv: Record<string, string>,
 ): { value: string | undefined; source: 'process-env' | 'settings-json' | null } {
+  if (managedEnv[key] != null && managedEnv[key] !== '') {
+    return { value: managedEnv[key], source: 'settings-json' };
+  }
   if (process.env[key] != null && process.env[key] !== '') {
     return { value: process.env[key], source: 'process-env' };
   }
@@ -63,9 +125,9 @@ function classifyKeyShape(value: string | undefined): ApiKeyEnvKind {
 }
 
 /** Does an official subscription login exist (keychain on macOS, file on Linux)? */
-function subscriptionPresent(home: string): boolean {
+function subscriptionPresent(home: string, configDir: string): boolean {
   // Linux / some setups store a credentials file.
-  if (existsSync(join(home, '.claude', '.credentials.json'))) return true;
+  if (existsSync(join(configDir, '.credentials.json'))) return true;
   // macOS Keychain entry created by Claude Code.
   if (platform() === 'darwin') {
     try {
@@ -82,21 +144,55 @@ function subscriptionPresent(home: string): boolean {
   return top?.oauthAccount != null;
 }
 
-function detectClient(): { version: string | null; isOfficialBinary: boolean; installMethod: string | null } {
+export function detectClient(): DoctorInput['client'] {
+  let executablePath: string | null = null;
+  let resolvedPath: string | null = null;
   let version: string | null = null;
-  let installMethod: string | null = null;
-  // Prefer reading the globally installed package.json (no spawn of the 231MB binary).
-  for (const base of npmGlobalRoots()) {
-    const pkgPath = join(base, '@anthropic-ai', 'claude-code', 'package.json');
-    const pkg = readJson(pkgPath);
-    if (pkg?.version) {
-      version = String(pkg.version);
-      break;
+
+  try {
+    const locator = platform() === 'win32' ? 'where.exe' : 'which';
+    const output = execFileSync(locator, [platform() === 'win32' ? 'claude.exe' : 'claude'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 3000,
+    });
+    executablePath = output.split(/\r?\n/).find(Boolean)?.trim() ?? null;
+    if (executablePath) {
+      try {
+        resolvedPath = realpathSync(executablePath);
+      } catch {
+        resolvedPath = executablePath;
+      }
+      const versionOutput = execFileSync(executablePath, ['--version'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: 5000,
+      });
+      version = versionOutput.match(/\b\d+\.\d+\.\d+(?:[-+][\w.-]+)?\b/)?.[0] ?? null;
     }
+  } catch {
+    /* not installed, not on PATH, or did not answer --version */
   }
-  const top = readJson(join(homedir(), '.claude.json'));
-  if (typeof top?.installMethod === 'string') installMethod = top.installMethod;
-  return { version, isOfficialBinary: version != null, installMethod };
+
+  const normalized = (resolvedPath ?? executablePath ?? '').replaceAll('\\', '/');
+  const invoked = (executablePath ?? '').replaceAll('\\', '/');
+  const home = homedir().replaceAll('\\', '/');
+  const native =
+    invoked === `${home}/.local/bin/claude` ||
+    invoked === `${home}/.local/bin/claude.exe` ||
+    normalized.startsWith(`${home}/.local/share/claude/`) ||
+    normalized.startsWith(`${home}/.claude/local/`);
+  const npm = normalized.includes('/node_modules/@anthropic-ai/claude-code');
+  const homebrew = /\/(?:Caskroom|Cellar)\/claude-code(?:@latest)?\//.test(normalized);
+  const winget = /\/Microsoft\/WinGet\/Packages\/Anthropic\.ClaudeCode_/i.test(normalized);
+  const installMethod = native ? 'native' : homebrew ? 'homebrew' : winget ? 'winget' : npm ? 'npm' : null;
+
+  return {
+    version,
+    isOfficialBinary: version != null && installMethod != null,
+    installMethod,
+    executablePath,
+  };
 }
 
 /**
@@ -114,22 +210,6 @@ function sh(cmd: string): string {
   }
 }
 
-function boolYaml(text: string, key: string): boolean | null {
-  const m = text.match(new RegExp(`^\\s*${key}:\\s*(true|false)\\s*$`, 'm'));
-  if (!m) return null;
-  return m[1] === 'true';
-}
-
-function strYaml(text: string, key: string): string | null {
-  const m = text.match(new RegExp(`^\\s*${key}:\\s*(.+)\\s*$`, 'm'));
-  return m ? m[1]!.trim().replace(/^['"]|['"]$/g, '') : null;
-}
-
-function numYaml(text: string, key: string): number | null {
-  const m = text.match(new RegExp(`^\\s*${key}:\\s*(\\d+)\\s*$`, 'm'));
-  return m ? Number(m[1]) : null;
-}
-
 function readText(path: string): string | null {
   try {
     if (!existsSync(path)) return null;
@@ -139,17 +219,36 @@ function readText(path: string): string | null {
   }
 }
 
-function detectClashConfig(psOut: string): NonNullable<NonNullable<DoctorInput['localProxy']>['clash']> | undefined {
+function record(value: unknown): Record<string, unknown> | null {
+  return value != null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function bool(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null;
+}
+
+function str(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+function num(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+export function detectClashConfig(psOut: string): NonNullable<NonNullable<DoctorInput['localProxy']>['clash']> | undefined {
   const clashLine = psOut
     .split('\n')
     .find((line) => /(?:verge-mihomo|clash-verge|mihomo)/i.test(line) && /\s-f\s/.test(line));
   const configPath =
-    clashLine?.match(/\s-f\s(.+?clash-verge\.ya?ml)(?=\s+-\w|\s*$)/)?.[1]?.trim() ?? null;
+    clashLine?.match(/\s-f\s+(?:"([^"]+\.ya?ml)"|'([^']+\.ya?ml)'|(\S+\.ya?ml))/i)?.slice(1).find(Boolean)?.trim() ?? null;
   if (!configPath) return undefined;
   const text = readText(configPath);
   if (!text) {
     return {
       configPath,
+      parseStatus: 'unreadable',
       mode: null,
       mixedPort: null,
       ipv6: null,
@@ -169,42 +268,71 @@ function detectClashConfig(psOut: string): NonNullable<NonNullable<DoctorInput['
     };
   }
 
-  // Real Clash/mihomo configs indent list items (`  - name: …`) under
-  // proxy-groups:/rules:, and a section may be the LAST block in the file — so
-  // every anchor tolerates leading whitespace and terminates on a top-level key
-  // (`^\S`) or true end-of-input (`(?![\s\S])`), never the bogus `\Z`.
-  const section = (key: string): string =>
-    text.match(new RegExp(`^${key}:[\\s\\S]*?(?=^\\S|(?![\\s\\S]))`, 'm'))?.[0] ?? '';
-  const dnsSection = section('dns');
-  const tunSection = section('tun');
-
-  const groupSection =
-    text.match(/^\s*-\s*name:\s*["']?ClaudeCode\b[\s\S]*?(?=^\s*-\s*name:|^\S|(?![\s\S]))/m)?.[0] ?? '';
-  const proxySubsection = groupSection.match(/^\s*proxies:\s*$([\s\S]*)/m)?.[1] ?? '';
-  const aiGroupMembers = Array.from(proxySubsection.matchAll(/^\s*-\s+(.+?)\s*$/gm))
-    .map((x) => x[1]!.trim())
-    .filter((x) => x.length > 0);
-  const claudeRuleTarget =
-    text.match(/^\s*-\s*DOMAIN-SUFFIX,anthropic\.com,([^\s,]+)/m)?.[1] ??
-    text.match(/^\s*-\s*DOMAIN-SUFFIX,claude\.(?:ai|com),([^\s,]+)/m)?.[1] ??
+  let config: Record<string, unknown>;
+  try {
+    config = record(parseYaml(text)) ?? {};
+  } catch {
+    return {
+      configPath,
+      parseStatus: 'unreadable',
+      mode: null,
+      mixedPort: null,
+      ipv6: null,
+      dnsEnabled: null,
+      dnsIpv6: null,
+      dnsEnhancedMode: null,
+      dnsRespectRules: null,
+      tunEnabled: null,
+      tunStack: null,
+      tunAutoRoute: null,
+      tunStrictRoute: null,
+      hasClaudeCodeGroup: false,
+      hasClaudeRules: false,
+      claudeRuleTarget: null,
+      finalMatchTarget: null,
+      aiGroupMembers: [],
+    };
+  }
+  const dns = record(config.dns) ?? {};
+  const tun = record(config.tun) ?? {};
+  const rules = Array.isArray(config.rules) ? config.rules.filter((item): item is string => typeof item === 'string') : [];
+  const groups = Array.isArray(config['proxy-groups'])
+    ? config['proxy-groups'].map(record).filter((item): item is Record<string, unknown> => item !== null)
+    : [];
+  const claudeRule = rules.find((rule) =>
+    /^(?:DOMAIN|DOMAIN-SUFFIX|DOMAIN-KEYWORD|GEOSITE),[^,]*(?:anthropic|claude\.(?:ai|com)|claude)[^,]*,/i.test(rule.trim()),
+  );
+  const claudeRuleTarget = claudeRule?.split(',').at(-1)?.trim() || null;
+  const aiGroup =
+    groups.find((group) => claudeRuleTarget != null && str(group.name) === claudeRuleTarget) ??
+    groups.find((group) => /(?:claude|anthropic)/i.test(str(group.name) ?? '')) ??
     null;
-  const finalMatchTarget = Array.from(text.matchAll(/^\s*-\s*MATCH,([^\s,]+)/gm)).at(-1)?.[1] ?? null;
+  const aiGroupMembers = Array.isArray(aiGroup?.proxies)
+    ? aiGroup.proxies.filter((item): item is string => typeof item === 'string')
+    : [];
+  const finalMatchTarget = rules
+    .filter((rule) => /^MATCH,/i.test(rule.trim()))
+    .at(-1)
+    ?.split(',')
+    .at(-1)
+    ?.trim() || null;
 
   return {
     configPath,
-    mode: strYaml(text, 'mode'),
-    mixedPort: numYaml(text, 'mixed-port'),
-    ipv6: boolYaml(text, 'ipv6'),
-    dnsEnabled: boolYaml(dnsSection, 'enable'),
-    dnsIpv6: boolYaml(dnsSection, 'ipv6'),
-    dnsEnhancedMode: strYaml(dnsSection, 'enhanced-mode'),
-    dnsRespectRules: boolYaml(dnsSection, 'respect-rules'),
-    tunEnabled: boolYaml(tunSection, 'enable'),
-    tunStack: strYaml(tunSection, 'stack'),
-    tunAutoRoute: boolYaml(tunSection, 'auto-route'),
-    tunStrictRoute: boolYaml(tunSection, 'strict-route'),
-    hasClaudeCodeGroup: /^\s*-\s*name:\s*["']?ClaudeCode\b/m.test(text),
-    hasClaudeRules: /^\s*-\s*DOMAIN-SUFFIX,(?:anthropic\.com|claude\.(?:ai|com)),/m.test(text),
+    parseStatus: 'parsed',
+    mode: str(config.mode),
+    mixedPort: num(config['mixed-port']),
+    ipv6: bool(config.ipv6),
+    dnsEnabled: bool(dns.enable),
+    dnsIpv6: bool(dns.ipv6),
+    dnsEnhancedMode: str(dns['enhanced-mode']),
+    dnsRespectRules: bool(dns['respect-rules']),
+    tunEnabled: bool(tun.enable),
+    tunStack: str(tun.stack),
+    tunAutoRoute: bool(tun['auto-route']),
+    tunStrictRoute: bool(tun['strict-route']),
+    hasClaudeCodeGroup: aiGroup !== null,
+    hasClaudeRules: claudeRule !== undefined,
     claudeRuleTarget,
     finalMatchTarget,
     aiGroupMembers,
@@ -294,17 +422,14 @@ function detectLocalProxy(): NonNullable<DoctorInput['localProxy']> {
   };
 }
 
-function npmGlobalRoots(): string[] {
-  const roots: string[] = [];
+function sanitizedOrigin(value: string | undefined): string | null {
+  if (!value) return null;
   try {
-    const r = execFileSync('npm', ['root', '-g'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-    if (r.trim()) roots.push(r.trim());
+    const url = new URL(value);
+    return url.origin === 'null' ? `<${url.protocol.replace(':', '')}-url>` : url.origin;
   } catch {
-    /* npm missing */
+    return '<invalid-url>';
   }
-  // common fallbacks
-  roots.push('/usr/local/lib/node_modules', join(homedir(), '.npm-global', 'lib', 'node_modules'));
-  return roots;
 }
 
 function classifyBaseUrl(value: string | undefined): DoctorInput['baseUrl'] {
@@ -313,54 +438,69 @@ function classifyBaseUrl(value: string | undefined): DoctorInput['baseUrl'] {
   try {
     host = new URL(value).hostname.toLowerCase();
   } catch {
-    host = value.toLowerCase();
+    /* Invalid input is reported without echoing a potentially secret value. */
   }
   const isOfficial = OFFICIAL_API_HOSTS.has(host);
-  const isLocal = host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local');
+  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host.endsWith('.local');
   const looksLikeRelay =
     !isOfficial && !isLocal && RELAY_HOST_HINTS.some((h) => host.includes(h));
-  return { value, source: null, isOfficial, looksLikeRelay };
+  return { value: sanitizedOrigin(value), source: null, isOfficial, looksLikeRelay };
 }
 
 /**
  * Resolve which credential Claude Code will actually use, following its
  * precedence: explicit env token/key > subscription login.
  */
-function resolvePrimaryKind(
+export function resolvePrimaryKind(
   apiKeyEnvKind: ApiKeyEnvKind,
   authTokenKind: ApiKeyEnvKind,
+  oauthTokenEnvSet: boolean,
+  apiKeyHelperSet: boolean,
+  cloudProvider: DoctorInput['credential']['cloudProvider'],
   hasSubscription: boolean,
 ): CredentialKind {
-  // A subscription OAuth token (sk-ant-oat*) is the red-line credential whether
-  // it was placed in ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN — classify both.
-  if (apiKeyEnvKind === 'oauth-token' || authTokenKind === 'oauth-token') return 'oauth-token-env';
+  // Mirrors the documented Claude Code precedence. Do not infer from which
+  // credentials merely exist; only the first effective source is classified.
+  if (cloudProvider) return 'cloud-provider';
+  if (authTokenKind === 'oauth-token') return 'oauth-token-env';
+  if (authTokenKind !== 'none') return 'auth-token';
+  if (apiKeyEnvKind === 'oauth-token') return 'oauth-token-env';
   if (apiKeyEnvKind === 'api-key') return 'api-key';
   if (apiKeyEnvKind === 'other') return 'unknown';
-  if (authTokenKind === 'api-key') return 'api-key';
-  if (authTokenKind === 'other') return 'auth-token';
+  if (apiKeyHelperSet) return 'api-key-helper';
+  if (oauthTokenEnvSet) return 'oauth-token-env';
   if (hasSubscription) return 'subscription-oauth';
   return 'none';
 }
 
 export function collect(): DoctorInput {
   const home = homedir();
-  const sEnv = settingsEnv(home);
+  const configDir = process.env.CLAUDE_CONFIG_DIR || join(home, '.claude');
+  const settings = effectiveSettings(configDir);
+  const sEnv = settings.env;
+  const env = (key: string) => effEnv(key, sEnv, settings.managedEnv);
 
-  const baseUrlEff = effEnv('ANTHROPIC_BASE_URL', sEnv);
+  const baseUrlEff = env('ANTHROPIC_BASE_URL');
   const baseUrl = classifyBaseUrl(baseUrlEff.value);
   baseUrl.source = baseUrlEff.source;
 
-  const apiKeyEff = effEnv('ANTHROPIC_API_KEY', sEnv);
+  const apiKeyEff = env('ANTHROPIC_API_KEY');
   const apiKeyEnvKind = classifyKeyShape(apiKeyEff.value);
-  const authTokenEff = effEnv('ANTHROPIC_AUTH_TOKEN', sEnv);
+  const authTokenEff = env('ANTHROPIC_AUTH_TOKEN');
   const authTokenKind = classifyKeyShape(authTokenEff.value);
   const authTokenSet = authTokenEff.value != null;
-  const hasSubscription = subscriptionPresent(home);
-  const customHeadersSet = effEnv('ANTHROPIC_CUSTOM_HEADERS', sEnv).value != null;
-  const apiKeyHelperSet = (() => {
-    const s = readJson(join(home, '.claude', 'settings.json'));
-    return typeof s?.apiKeyHelper === 'string' && s.apiKeyHelper.length > 0;
-  })();
+  const oauthTokenEff = env('CLAUDE_CODE_OAUTH_TOKEN');
+  const oauthTokenEnvSet = oauthTokenEff.value != null;
+  const hasSubscription = subscriptionPresent(home, configDir);
+  const customHeadersSet = env('ANTHROPIC_CUSTOM_HEADERS').value != null;
+  const apiKeyHelperSet = Boolean(settings.apiKeyHelper);
+  const cloudProvider = env('CLAUDE_CODE_USE_BEDROCK').value
+    ? 'bedrock'
+    : env('CLAUDE_CODE_USE_VERTEX').value
+      ? 'vertex'
+      : env('CLAUDE_CODE_USE_FOUNDRY').value
+        ? 'foundry'
+        : null;
 
   const client = detectClient();
 
@@ -370,8 +510,8 @@ export function collect(): DoctorInput {
   const identity = {
     machineIdPresent: typeof top?.machineID === 'string',
     userIdPresent: typeof top?.userID === 'string',
-    statsigStableIdPresent: existsSync(join(home, '.claude', 'statsig')),
-    telemetryPresent: existsSync(join(home, '.claude', 'telemetry')),
+    statsigStableIdPresent: existsSync(join(configDir, 'statsig')),
+    telemetryPresent: existsSync(join(configDir, 'telemetry')),
     orgType: typeof oauthAccount?.organizationType === 'string' ? (oauthAccount.organizationType as string) : null,
   };
 
@@ -391,22 +531,35 @@ export function collect(): DoctorInput {
     platform: platform(),
     baseUrl,
     credential: {
-      primaryKind: resolvePrimaryKind(apiKeyEnvKind, authTokenKind, hasSubscription),
+      primaryKind: resolvePrimaryKind(
+        apiKeyEnvKind,
+        authTokenKind,
+        oauthTokenEnvSet,
+        apiKeyHelperSet,
+        cloudProvider,
+        hasSubscription,
+      ),
       apiKeyEnvKind,
+      apiKeyEnvSource: apiKeyEff.source,
       authTokenEnvSet: authTokenSet,
+      authTokenEnvSource: authTokenEff.source,
+      oauthTokenEnvSet,
+      oauthTokenEnvSource: oauthTokenEff.source,
+      cloudProvider,
       subscriptionPresent: hasSubscription,
       apiKeyHelperSet,
       customHeadersSet,
     },
     client,
     proxy: {
-      http: process.env.HTTP_PROXY ?? process.env.http_proxy ?? null,
-      https: process.env.HTTPS_PROXY ?? process.env.https_proxy ?? null,
+      http: sanitizedOrigin(process.env.HTTP_PROXY ?? process.env.http_proxy),
+      https: sanitizedOrigin(process.env.HTTPS_PROXY ?? process.env.https_proxy),
     },
     localProxy: detectLocalProxy(),
     identity,
     runtime,
     timezone,
     network: null,
+    networkProbe: 'not-requested',
   };
 }

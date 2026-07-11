@@ -3,7 +3,7 @@
  * A null return means "not applicable / nothing to say". Evidence and causal
  * labels come straight from docs/ban-signals.md. Nothing here does I/O.
  */
-import { SOURCES, KNOWN_UNSUPPORTED_REGIONS } from './catalog.js';
+import { SOURCES, regionSupport } from './catalog.js';
 import type { DoctorInput, Finding } from './types.js';
 
 type Detector = (input: DoctorInput) => Finding | null;
@@ -157,6 +157,26 @@ const ipv6Hijack: Detector = (i) => {
 const clashMode: Detector = (i) => {
   const c = i.localProxy?.clash;
   if (!c) return null;
+  if (c.parseStatus === 'unreadable') {
+    return {
+      id: 'L3-clash-mode',
+      title: 'Clash 配置可观测性',
+      status: 'warn',
+      confidence: 'confirmed',
+      causal: false,
+      scored: false,
+      classLabel: '可观测性',
+      summary: `检测到 Clash/Mihomo 配置路径，但文件无法读取或 YAML 无法解析：${c.configPath ?? '—'}`,
+      detail: '后续规则组和出口稳定性检查已跳过；无结果不能解释为配置正常。',
+      evidence: [SOURCES.networkLedger],
+      fix: {
+        kind: 'network',
+        title: '确认配置文件可读且 YAML 有效',
+        commands: [],
+        note: '先在 Clash/Mihomo 客户端完成配置校验，再重新运行 claudedoctor。',
+      },
+    };
+  }
 
   const issues: string[] = [];
   if (c.mode && c.mode !== 'rule') issues.push(`mode=${c.mode}`);
@@ -169,15 +189,15 @@ const clashMode: Detector = (i) => {
   if (issues.length > 0) {
     return {
       id: 'L3-clash-mode',
-      title: 'Clash 配置质量',
-      status: 'warn',
+      title: 'Clash 配置建议',
+      status: 'info',
       confidence: 'reported',
-      causal: true,
+      causal: false,
       scored: false,
       classLabel: '路径卫生',
-      summary: `Clash/Mihomo 关键项需留意：${issues.join(' · ')}`,
+      summary: `Clash/Mihomo 与推荐模板不同：${issues.join(' · ')}（仅建议，不代表当前路径异常）`,
       detail:
-        `对终端 AI 工具更关键的不是“开没开代理”，而是配置是否适合命令行与双栈场景。通常更稳的组合是 ` +
+        `这是通用路径卫生建议，不是 Claude 官方要求，也不影响健康退出码。通常更稳的组合是 ` +
         `mode=rule、tun.enable=true、ipv6=true、dns.enable=true、enhanced-mode=fake-ip、respect-rules=true。` +
         `${c.configPath ? `当前配置文件：${c.configPath}` : ''}`,
       evidence: [SOURCES.networkLedger],
@@ -192,7 +212,7 @@ const clashMode: Detector = (i) => {
 
   return {
     id: 'L3-clash-mode',
-    title: 'Clash 配置质量',
+    title: 'Clash 配置建议',
     status: 'ok',
     confidence: 'reported',
     causal: true,
@@ -207,21 +227,21 @@ const clashMode: Detector = (i) => {
 /** L4 — explicit Claude/Anthropic routing in Clash/Mihomo rules. */
 const clashClaudeRules: Detector = (i) => {
   const c = i.localProxy?.clash;
-  if (!c) return null;
+  if (!c || c.parseStatus !== 'parsed') return null;
 
   if (!c.hasClaudeCodeGroup || !c.hasClaudeRules) {
     return {
       id: 'L4-clash-claude-rules',
       title: 'Claude 专用规则',
-      status: 'warn',
+      status: 'info',
       confidence: 'reported',
-      causal: true,
+      causal: false,
       scored: false,
       classLabel: '路径卫生',
-      summary: '未检测到明确的 Claude/Anthropic 专用规则与分组 — AI 流量更容易落到通用出口',
+      summary: '未配置 Claude/Anthropic 专用规则与分组（可选优化，不代表当前出口异常）',
       detail:
-        '如果没有把 anthropic.com / claude.ai / claude.com 等流量单独送到一个可控分组，最终很可能跟着通用 MATCH 或大组走，' +
-        '导致地区、机房属性和稳定性都不可控。',
+        '专用规则便于单独控制 AI 出口，但不是 Claude 官方要求。真实地区与信誉结论仍以 --net 探测为准；' +
+        '不应仅因缺少专用分组就判定风险。',
       evidence: [SOURCES.networkLedger],
       fix: {
         kind: 'network',
@@ -254,7 +274,7 @@ const clashClaudeRules: Detector = (i) => {
 /** L5 — ClaudeCode group exit stability. */
 const clashAiExit: Detector = (i) => {
   const c = i.localProxy?.clash;
-  if (!c || !c.hasClaudeCodeGroup) return null;
+  if (!c || c.parseStatus !== 'parsed' || !c.hasClaudeCodeGroup) return null;
 
   const { generic, dedicated } = splitAiGroupMembers(c.aiGroupMembers);
   if (generic.length > 0 && dedicated.length <= 1) {
@@ -341,7 +361,7 @@ const baseUrl: Detector = (i) => {
         title: '停用中转，让订阅凭证回到官方端点',
         commands:
           b.source === 'settings-json'
-            ? ['# 从 ~/.claude/settings.json 的 "env" 块移除 ANTHROPIC_BASE_URL']
+            ? ['# 从 /status 列出的生效 settings.json 的 "env" 块移除 ANTHROPIC_BASE_URL']
             : ['unset ANTHROPIC_BASE_URL', '# 或从你的 shell profile 中删除该 export'],
         note: '若你确实需要自建网关做审计，请改用官方 API key（sk-ant-api*），而非订阅 OAuth。',
         // Only auto-appliable when the var came from the shell env; a settings.json
@@ -386,8 +406,8 @@ const baseUrl: Detector = (i) => {
  */
 const staleApiKey: Detector = (i) => {
   const { credential: c } = i;
-  const envHasKey = c.apiKeyEnvKind === 'api-key' || c.apiKeyEnvKind === 'other';
-  if (envHasKey && c.subscriptionPresent) {
+  const keyOverridesLogin = c.primaryKind === 'api-key' || c.primaryKind === 'unknown';
+  if (keyOverridesLogin && c.subscriptionPresent) {
     return {
       id: 'A2-stale-apikey',
       title: '凭证覆盖 / 假连坐',
@@ -403,9 +423,12 @@ const staleApiKey: Detector = (i) => {
       fix: {
         kind: 'remove-override',
         title: '移除多余的 ANTHROPIC_API_KEY，恢复订阅登录',
-        commands: ['unset ANTHROPIC_API_KEY', '# 或从 shell profile / settings.json 的 env 块删除'],
+        commands:
+          c.apiKeyEnvSource === 'settings-json'
+            ? ['# 从 /status 列出的生效 settings.json env 中删除 ANTHROPIC_API_KEY']
+            : ['unset ANTHROPIC_API_KEY', '# 或从 shell profile 中删除对应 export'],
         note: '仅当你本就想用订阅登录时才移除；若你是有意用 API key，忽略即可。',
-        apply: { unset: ['ANTHROPIC_API_KEY'] },
+        apply: c.apiKeyEnvSource === 'settings-json' ? undefined : { unset: ['ANTHROPIC_API_KEY'] },
       },
     };
   }
@@ -421,6 +444,21 @@ const credentialKind: Detector = (i) => {
   const { credential: c } = i;
   switch (c.primaryKind) {
     case 'oauth-token-env':
+      if (c.oauthTokenEnvSet && c.apiKeyEnvKind === 'none' && !c.authTokenEnvSet) {
+        return {
+          id: 'A2-credential-share',
+          title: '凭证类型',
+          status: 'ok',
+          confidence: 'confirmed',
+          causal: false,
+          scored: false,
+          summary: '使用 claude setup-token 的长效 OAuth token（官方支持 CI / 脚本）',
+          detail:
+            'CLAUDE_CODE_OAUTH_TOKEN 是官方记录的非交互认证方式，适用于 CI 和脚本。它仍属于个人订阅凭证，' +
+            '不要共享、转售或交给第三方服务代用户调用。',
+          evidence: [SOURCES.authentication, SOURCES.consumerTerms],
+        };
+      }
       return {
         id: 'A2-credential-share',
         title: '凭证类型',
@@ -428,19 +466,22 @@ const credentialKind: Detector = (i) => {
         confidence: 'confirmed',
         causal: true,
         scored: true,
-        summary: '正把订阅 OAuth token 放在环境变量里用（sk-ant-oat*）— 已被官方 API 端点整体拒绝',
+        summary: 'OAuth token 放在了 ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN — 变量用途与官方认证方式不匹配',
         detail:
-          'claude setup-token 产出的 sk-ant-oat* token 已被 Anthropic 在 API 端点整体拒绝，' +
-          '且订阅凭证脱离官方客户端使用违反 Consumer Terms。',
-        evidence: [SOURCES.ccLegal, SOURCES.consumerTerms],
+          'claude setup-token 产出的 token 应放在 CLAUDE_CODE_OAUTH_TOKEN。当前变量会按 API key 或网关 bearer ' +
+          'token 发送，可能认证失败，也容易把订阅凭证误交给自定义端点。',
+        evidence: [SOURCES.authentication, SOURCES.ccLegal],
         fix: {
           kind: 'switch-credential',
-          title: '改用官方登录或 API key',
+          title: '改用官方记录的 OAuth token 变量',
           commands: [
-            'unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN  # sk-ant-oat* 可能落在其中任一个',
-            'claude  # 用官方订阅登录，或设 ANTHROPIC_API_KEY=sk-ant-api…',
+            'unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN',
+            'export CLAUDE_CODE_OAUTH_TOKEN="<claude setup-token 的输出>"',
           ],
-          apply: { unset: ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN'] },
+          apply:
+            c.apiKeyEnvSource === 'settings-json' || c.authTokenEnvSource === 'settings-json'
+              ? undefined
+              : { unset: ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN'] },
         },
       };
     case 'auth-token':
@@ -465,6 +506,28 @@ const credentialKind: Detector = (i) => {
         scored: false,
         summary: '使用 API key（sk-ant-api*）— 第三方工具中使用官方允许',
         evidence: [SOURCES.ccLegal],
+      };
+    case 'api-key-helper':
+      return {
+        id: 'A2-credential-share',
+        title: '凭证类型',
+        status: 'ok',
+        confidence: 'confirmed',
+        causal: false,
+        scored: false,
+        summary: '使用 apiKeyHelper 动态提供 API key（官方支持）',
+        evidence: [SOURCES.authentication],
+      };
+    case 'cloud-provider':
+      return {
+        id: 'A2-credential-share',
+        title: '凭证类型',
+        status: 'ok',
+        confidence: 'confirmed',
+        causal: false,
+        scored: false,
+        summary: `使用官方支持的云提供商认证（${c.cloudProvider ?? 'cloud'}）`,
+        evidence: [SOURCES.authentication],
       };
     case 'subscription-oauth':
       return {
@@ -491,27 +554,48 @@ const clientIntegrity: Detector = (i) => {
   if (i.client.isOfficialBinary) {
     return {
       id: 'A3-client-integrity',
-      title: '客户端完整性',
+      title: '客户端来源',
       status: 'ok',
-      confidence: 'confirmed',
+      confidence: 'reported',
       causal: true,
       scored: true,
-      summary: `官方 Claude Code 客户端${i.client.version ? ` v${i.client.version}` : ''}`,
-      evidence: [SOURCES.harnessCrackdownHN],
+      summary: `当前 PATH 命中官方分发路径（${i.client.installMethod}）${i.client.version ? ` · v${i.client.version}` : ''}`,
+      detail:
+        `活动命令：${i.client.executablePath ?? '—'}。本检查识别安装来源与版本输出，不做二进制签名或哈希认证，` +
+        '因此不把“路径看起来官方”夸大成完整性证明。',
+      evidence: [SOURCES.installation, SOURCES.harnessCrackdownHN],
+    };
+  }
+  if (!i.client.executablePath || !i.client.version) {
+    return {
+      id: 'A3-client-integrity',
+      title: '客户端来源',
+      status: 'info',
+      confidence: 'confirmed',
+      causal: false,
+      scored: false,
+      summary: '当前 PATH 未找到可运行的 claude，无法评估客户端来源',
+      evidence: [SOURCES.installation],
+      fix: {
+        kind: 'advisory',
+        title: '按官方安装文档安装 Claude Code',
+        commands: [],
+        note: '安装后重新运行 claudedoctor；原生安装是官方推荐方式。',
+      },
     };
   }
   return {
     id: 'A3-client-integrity',
-    title: '客户端完整性',
+    title: '客户端来源',
     status: 'warn',
-    confidence: 'confirmed',
+    confidence: 'reported',
     causal: true,
-    scored: true,
-    summary: '未检测到官方 Claude Code 客户端 — 非官方/魔改客户端伪造官方身份是已证实的封号向量',
+    scored: false,
+    summary: `claude 可运行，但活动路径不属于已知官方分发位置：${i.client.executablePath}`,
     detail:
-      '2026-01 Anthropic 收紧了对"伪造 Claude Code harness"的检测：第三方客户端用订阅 token +' +
-      '伪造 header 冒充官方 binary 会触发 abuse filter 被自动封号（注意：存在误伤，官方会解封）。',
-    evidence: [SOURCES.harnessCrackdownHN, SOURCES.harnessCrackdownVB],
+      '这可能只是你自己的 shim、包管理器路径或尚未识别的新官方安装方式，不等于魔改客户端。若它确实是第三方 ' +
+      'harness，请勿用订阅凭证伪装官方 Claude Code。',
+    evidence: [SOURCES.installation, SOURCES.harnessCrackdownHN, SOURCES.harnessCrackdownVB],
     fix: {
       kind: 'advisory',
       title: '用官方客户端；自动化改用 API key',
@@ -570,10 +654,9 @@ const deviceTransparency: Detector = (i) => {
   };
 };
 
-/** A6 — automation/CI running on a subscription credential. Official stance: use an API key. */
+/** A6 — CI accidentally reusing an interactive login instead of a documented CI credential. */
 const automation: Detector = (i) => {
-  const usingSubscription =
-    i.credential.primaryKind === 'subscription-oauth' || i.credential.primaryKind === 'oauth-token-env';
+  const usingSubscription = i.credential.primaryKind === 'subscription-oauth';
   if (!i.runtime.isCI || !usingSubscription) return null;
   return {
     id: 'A6-automation',
@@ -582,16 +665,41 @@ const automation: Detector = (i) => {
     confidence: 'reported',
     causal: true,
     scored: true,
-    summary: '检测到 CI/非交互环境正用订阅凭证 — "非交互+高频"像 bot，易触发 abuse filter',
+    summary: '检测到 CI 环境在复用交互式登录；官方为 CI / 脚本提供了 setup-token 专用方式',
     detail:
-      '订阅(Pro/Max)凭证被设计给人交互使用；在 CI/脚本里非交互高频驱动，是官方点名的高风险用法模式。' +
-      '合规做法是自动化改用 API key(sk-ant-api*)。',
-    evidence: ['https://www.anthropic.com/legal/aup', 'https://code.claude.com/docs/en/legal-and-compliance'],
+      '不要把整个 ~/.claude 凭证目录或 Keychain 登录复制进 CI。官方支持两种明确方式：按量 API key，或通过 ' +
+      'claude setup-token 生成并放入 CLAUDE_CODE_OAUTH_TOKEN 的长效 token。',
+    evidence: [SOURCES.authentication, SOURCES.ccLegal],
     fix: {
       kind: 'switch-credential',
-      title: '自动化改用 API key',
-      commands: ['export ANTHROPIC_API_KEY=sk-ant-api…  # 从 Console 获取，专供自动化/CI'],
-      note: '别把订阅 OAuth 凭证塞进 CI；用付费 API key 是官方认可的自动化路径。',
+      title: '改用官方 CI 认证方式',
+      commands: [
+        'claude setup-token  # 交互生成一次',
+        'export CLAUDE_CODE_OAUTH_TOKEN="<secret>"  # 存到 CI secret；或改用 ANTHROPIC_API_KEY',
+      ],
+      note: 'setup-token 是官方支持的 CI/脚本路径；不要复制交互式登录文件。',
+    },
+  };
+};
+
+/** B4-probe — make an explicitly requested but failed network check visible. */
+const networkProbe: Detector = (i) => {
+  if (i.networkProbe !== 'failed') return null;
+  return {
+    id: 'B4-probe',
+    title: '联网探测',
+    status: 'warn',
+    confidence: 'confirmed',
+    causal: false,
+    scored: false,
+    summary: '已请求 --net，但未能取得网络画像；本次报告不包含地区/IP 结论',
+    detail: '可能原因包括网络不可达、curl 缺失、DNS/代理配置或情报服务超时。不要把“无结果”解读为“安全”。',
+    evidence: [SOURCES.networkLedger],
+    fix: {
+      kind: 'network',
+      title: '检查基础联网后重试',
+      commands: ['curl -fsS https://api.ipapi.is/'],
+      note: '确认命令返回 JSON 后，再运行 claudedoctor check --net。',
     },
   };
 };
@@ -603,7 +711,7 @@ const region: Detector = (i) => {
   const src = networkSource(n);
   const dual = familyBreakdown(n);
 
-  if (n.countryCode && KNOWN_UNSUPPORTED_REGIONS[n.countryCode]) {
+  if (n.isSupportedRegion === false) {
     return {
       id: 'B4-region',
       title: '出口地区',
@@ -633,9 +741,9 @@ const region: Detector = (i) => {
     causal: true,
     scored: true,
     summary:
-      n.countryCode && n.isSupportedRegion
+      n.countryCode && n.isSupportedRegion === true
         ? `${n.countryName ?? n.countryCode}（受支持）· ${src}${dual}`
-        : `未命中已知不支持清单 · ${src}${dual}`,
+        : `地区支持状态未知 · ${src}${dual}`,
     evidence: [SOURCES.supportedCountries],
   };
 };
@@ -645,7 +753,7 @@ const proxy: Detector = (i) => {
   const n = i.network;
   if (!n) return null;
   const flagged = n.isProxy === true || n.isTor === true || n.threatLevel === 'high';
-  const risk = n.riskScore ? `｜风险分 ${n.riskScore}` : '';
+  const risk = n.riskScore ? `｜第三方信誉标签 ${n.riskScore}` : '';
   const dual = familyBreakdown(n);
   if (!flagged) {
     if (n.isProxy === null && n.isTor === null) return null; // provider gave nothing
@@ -673,7 +781,7 @@ const proxy: Detector = (i) => {
     summary: `出口 IP 被标记为 ${kinds.join(' / ')}（${networkSource(n)}${risk}）— 与登录被拦、社区风控报告相关`,
     detail:
       '被标记的代理/VPN/Tor 出口在 claude.ai 登录时更易被 Cloudflare 拦，也见于社区封号自述（reported，' +
-      `非官方确认）。这是 IP 信誉信号，不等于确定封号；不计入风险分，仅提示。${dual}`,
+      `非官方确认）。这是 IP 信誉信号，不等于确定封号；不归入政策风险，仅提示。${dual}`,
     evidence: [SOURCES.appeals, SOURCES.datacenterOAuth],
     fix: {
       kind: 'network',
@@ -721,8 +829,8 @@ const routeDivergence: Detector = (i) => {
 
   const runtimeSrc = `${runtime.provider}${runtime.egressIp ? ` · ${runtime.egressIp}` : ''}`;
   const dual = familyBreakdown(n);
-  const runtimeUnsupported = runtime.countryCode != null && KNOWN_UNSUPPORTED_REGIONS[runtime.countryCode];
-  const selectedSupported = n.countryCode != null && !KNOWN_UNSUPPORTED_REGIONS[n.countryCode];
+  const runtimeUnsupported = regionSupport(runtime.countryCode) === false;
+  const selectedSupported = regionSupport(n.countryCode) === true;
 
   return {
     id: 'B4-route-divergence',
@@ -766,7 +874,7 @@ const dateStego: Detector = (i) => {
   const d = i.dateLine;
   if (!d) return null;
   const apostropheAscii = d.apostropheHex === '27';
-  const separatorAscii = !d.separatorHex.includes('2f'); // 2f = "/"
+  const separatorAscii = d.separatorHex === '2d 2d';
   const clean = apostropheAscii && separatorAscii;
   return {
     id: 'M0-date-stego',
@@ -776,10 +884,10 @@ const dateStego: Detector = (i) => {
     causal: false,
     scored: false,
     summary: clean
-      ? '未命中隐写：撇号为 ASCII 0x27、分隔符为 ASCII "-"'
+      ? '未命中隐写：撇号为 ASCII 0x27、两个分隔符均为 ASCII "-"'
       : '异常：日期行字节偏离 ASCII 基线，机制可能回归',
     detail: clean
-      ? '与 M0 字节级取证一致（该机制在当前版本已证伪）。仅作复检展示，不计入风险分。'
+      ? '与 M0 字节级取证一致（该机制在当前版本已证伪）。仅作复检展示，不归入政策风险。'
       : `撇号 hex=${d.apostropheHex} 分隔符 hex=${d.separatorHex} — 请对照 mechanism.md 复核。`,
     evidence: [SOURCES.mechanismLedger],
   };
@@ -805,12 +913,12 @@ const timezone: Detector = (i) => {
     summary: `${i.timezone}${cnTz ? '（中国时区）' : ''} — 画像因子，当前版本不编码，历史上曾被用作标记输入`,
     detail:
       '时区曾是"日期行隐写标记"的输入之一（2.1.91 起真实存在，官方承认是反滥用/反蒸馏实验，2026-07 移除）；' +
-      '我们在 2.1.201 字节级复检证实当前不再编码。因此不计入风险分，但它不是纯氛围——是可能回归的画像因子，' +
+      '我们在 2.1.201 字节级复检证实当前不再编码。因此不归入政策风险，但它不是纯氛围——是可能回归的画像因子，' +
       '尤其"中国时区 + 非官方中转"的组合值得留意。',
     evidence: [SOURCES.mechanismLedger],
     // Precautionary only: set TZ for the shell (not the OS clock). Offered when
     // on a China timezone. Currently DORMANT (2.1.201 doesn't encode tz) — will
-    // NOT change the risk score; it's profile hygiene / insurance if it returns.
+    // Does not change the policy-risk classification; it is regression insurance.
     ...(cnTz
       ? {
           fix: {
@@ -821,7 +929,7 @@ const timezone: Detector = (i) => {
               '# 想让整个终端都用可改为: export TZ=Asia/Singapore',
             ],
             note:
-              '预防性画像卫生：当前版本已不编码时区，这一项不会提升健康分，纯粹为机制回归时留个保险。' +
+              '预防性画像卫生：当前版本已不编码时区，这一项不会改变政策风险分类，只为机制回归留个保险。' +
               '默认做法是给 claude 命令套一个 shell 函数——只有 Claude Code 看到新时区，' +
               '系统时钟、菜单栏、日历、连终端里其它程序都不受影响，可随时一键撤销。',
             apply: { raw: ['claude() { TZ=Asia/Singapore command claude "$@"; }'] },
@@ -846,6 +954,7 @@ export const DETECTORS: Detector[] = [
   customHeaders,
   deviceTransparency,
   automation,
+  networkProbe,
   region,
   proxy,
   datacenter,
