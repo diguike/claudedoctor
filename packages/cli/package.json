@@ -52,7 +52,7 @@
   "devDependencies": {
     "@clack/prompts": "^1.7.0",
     "@claudedoctor/core": "workspace:*",
-    "@types/node": "^20.14.0",
+    "@types/node": "^26.1.1",
     "esbuild": "^0.28.1",
     "picocolors": "^1.1.1"
   },
