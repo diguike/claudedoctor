@@ -1,0 +1,39 @@
+name: Feature request
+description: Propose a detector, platform improvement, or user workflow
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user harm or diagnostic gap should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: observation
+    attributes:
+      label: Observable input and privacy impact
+      description: Explain how the signal can be collected safely and locally.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and confidence
+      description: Prefer primary sources and distinguish confirmed, reported, and speculative claims.
+    validations:
+      required: true
+  - type: textarea
+    id: limits
+    attributes:
+      label: False positives, false negatives, and remediation
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: This proposal improves compliant diagnostics and is not intended to evade platform safeguards.
+          required: true

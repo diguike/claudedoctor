@@ -1,0 +1,50 @@
+name: Bug report
+description: Report a reproducible failure, false positive, or false negative
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Never paste OAuth tokens, API keys, credential files, or unredacted private paths/IPs.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [CLI check, CLI fix/verify, Network probe, Web UI, Documentation, Packaging]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Claude Doctor version
+      placeholder: Output of claudedoctor --version
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      placeholder: macOS 15 / Ubuntu 24.04 / Windows 11, Node 20
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Minimal steps and sanitized output
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior and evidence
+      description: For verdict disputes, link the strongest source you have.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, private file contents, and personal identifiers.
+          required: true

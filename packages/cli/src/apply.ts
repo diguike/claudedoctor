@@ -38,9 +38,14 @@ export function blockLines(fixes: Fix[]): string[] {
   for (const k of set.keys()) unset.delete(k);
   const lines: string[] = [];
   for (const k of unset) lines.push(`unset ${k}`);
-  for (const [k, v] of set) lines.push(`export ${k}=${v}`);
+  for (const [k, v] of set) lines.push(`export ${k}=${shellQuote(v)}`);
   lines.push(...raw);
   return lines;
+}
+
+/** POSIX-safe single-quoted shell literal. */
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
 function stripBlock(text: string): string {
@@ -61,7 +66,8 @@ export interface ApplyResult {
 
 function backup(profile: string): string | null {
   if (!existsSync(profile)) return null;
-  const bak = `${profile}.claudedoctor.bak`;
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const bak = `${profile}.claudedoctor.${stamp}.bak`;
   copyFileSync(profile, bak);
   return bak;
 }

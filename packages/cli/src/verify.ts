@@ -35,7 +35,7 @@ function decompress(raw: Buffer, enc: string): Buffer {
 
 /** Pull the genuine "Today's date is YYYY-MM-DD." (requires the digits to avoid
  *  matching injected project context that also contains the phrase). */
-function extractDateLine(body: string): DateLineResult | null {
+export function extractDateLine(body: string): DateLineResult | null {
   const m = body.match(/Today(.{1,3}?)s date is (\d{4})(.)\d{2}(.)\d{2}\./);
   if (!m) return null;
   const apostrophe = m[1] ?? "'";
@@ -43,7 +43,7 @@ function extractDateLine(body: string): DateLineResult | null {
   return {
     text: m[0],
     apostropheHex: hexOf(apostrophe),
-    separatorHex: hexOf(sep1),
+    separatorHex: `${hexOf(sep1)} ${hexOf(m[4] ?? '-')}`,
   };
 }
 
@@ -65,7 +65,18 @@ export function verifyDateLine(timeoutMs = 20000): Promise<DateLineResult | null
 
     const server = createServer((req, res) => {
       const chunks: Buffer[] = [];
-      req.on('data', (c: Buffer) => chunks.push(c));
+      let size = 0;
+      req.on('data', (c: Buffer) => {
+        size += c.length;
+        if (size > 16 * 1024 * 1024) {
+          res.writeHead(413, { 'content-type': 'application/json' });
+          res.end('{"error":"request_too_large"}');
+          req.destroy();
+          finish(null);
+          return;
+        }
+        chunks.push(c);
+      });
       req.on('end', () => {
         const body = decompress(Buffer.concat(chunks), String(req.headers['content-encoding'] ?? ''));
         const found = extractDateLine(body.toString('utf8'));

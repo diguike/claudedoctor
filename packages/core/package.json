@@ -1,7 +1,8 @@
 {
   "name": "@claudedoctor/core",
   "version": "0.0.0",
-  "description": "Isomorphic detection, scoring, and forensics logic shared by the CLI and web. No I/O side effects.",
+  "private": true,
+  "description": "Isomorphic evidence classification and diagnostics shared by the CLI and web. No I/O side effects.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

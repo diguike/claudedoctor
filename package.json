@@ -2,7 +2,7 @@
   "name": "claudedoctor",
   "version": "0.0.0",
   "private": true,
-  "description": "A real anti-detection toolkit for Claude Code — detect, fix, re-check. Not a scoreboard.",
+  "description": "Evidence-first diagnostics for Claude Code credentials, client source, network policy, and configuration hygiene.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -12,7 +12,10 @@
     "build": "pnpm -r build",
     "dev:cli": "pnpm -F @claudedoctor/cli dev",
     "dev:web": "pnpm -F @claudedoctor/web dev",
-    "check": "pnpm -r typecheck"
+    "check": "pnpm -F @claudedoctor/core build && pnpm -r typecheck",
+    "test": "pnpm build && node --test packages/core/test/*.test.mjs packages/cli/test/*.test.mjs packages/web/test/*.test.mjs",
+    "pack:check": "node scripts/check-pack.mjs",
+    "validate": "pnpm check && pnpm test && pnpm pack:check"
   },
   "license": "MIT",
   "author": "递归客",

@@ -1,14 +1,14 @@
 # 封号信号证据账本（M1 依据）
 
 > 本文件是 Claude Doctor 对"**真实账号封禁 / 风控信号**"的取证账本。与 `mechanism.md`（M0 日期行隐写取证）并列。
-> 立身原则同 CLAUDE.md 第 7 节：**只把有服务端因果的信号计入风险分；氛围 / 传闻信号单独展示并标注，绝不制造 FUD。**
-> 取证日期 2026-07-05。每条结论标注 **confirmed / reported / speculative**。
+> 立身原则同 CLAUDE.md 第 7 节：**只把有服务端因果的信号归为政策风险；氛围 / 传闻信号单独展示并标注，绝不制造 FUD。**
+> 初次取证日期 2026-07-05；最近一次官方文档核对 2026-07-10。每条结论标注 **confirmed / reported / speculative**。
 
 ---
 
 ## 0. 一句话总纲
 
-> **目前唯一被 Anthropic 官方证实的封号因果，是"订阅凭证（claude.ai OAuth token）脱离官方 Claude Code 客户端使用"** —— 无论是第三方 harness（OpenCode / Cline / RooCode…）还是汇聚型中转（relay / 镜像 / 拼车）。其余信号（IP、拼车行为学、时区隐写）要么是"访问被拒而非封号"，要么是社区观测 / 传闻。
+> **本地最关键、且有官方条款直接支撑的凭证风险，是订阅凭证（claude.ai OAuth token）被第三方代用户转发。** 官方帮助中心还把“不支持地区创建账号”和一般条款/AUP 违规列为账号停用原因。机房/VPN/代理信誉、时区和行为学推断不能冒充这些官方结论。
 
 因此 CLI 体检的**主轴**是：**你的订阅凭证有没有离开官方客户端？** 而不是浏览器指纹、也不是（M0 已证伪的）日期行隐写。
 
@@ -16,22 +16,22 @@
 
 ## 1. 信号分层总表（M1 `check` 直接据此实现）
 
-| ID | 信号 | 因果强度 | 可信度 | CLI 本地可测? | 可开药? | 计入风险分? |
+| ID | 信号 | 因果强度 | 可信度 | CLI 本地可测? | 可开药? | 政策风险? |
 |---|---|---|---|---|---|---|
 | **A1** | `ANTHROPIC_BASE_URL` 指向非官方中转 + 用订阅 OAuth | 强（服务端凭证-客户端绑定校验） | **confirmed** | ✅ 读 env + 判凭证类型 | ✅ 切回官方 / 改用 API key | ✅ 高 |
 | **A1′** | 中转为"汇聚型"（多 token 单出口 relay/拼车） | 强（流量特征） | reported | ⚠️ 只能测 URL 特征 | ✅ 提示脱离中转 | ✅ 中 |
 | **A2** | 共享 / 转售订阅凭证、多人共用 token | 强（条款明禁 + 官方点名执法） | **confirmed**（条款）/ reported（拼车秒封案例） | ⚠️ 仅测凭证类型，不测"共享行为" | 部分 | ✅ 中 |
 | **A2-bug** | 残留被封 org 的 `ANTHROPIC_API_KEY` 覆盖有效订阅登录（假连坐） | 强（confirmed bug） | **confirmed**（claude-code#8327） | ✅ 读 env + 配置 | ✅ 移除 env | ✅ 高（且易修） |
-| **A3** | 非官方 / 魔改客户端伪造官方 Claude Code 身份（UA/header） | 强（官方证实触发 abuse filter） | **confirmed** | ✅ 判运行的是不是官方 binary | ✅ 用官方客户端 / API key | ✅ 高 |
-| **A3′** | 异常自动化 / 高频请求触发 abuse filter | 中（机制确证，阈值未公开） | reported | ❌ 本地难量化 | 提示性 | ⚠️ 仅提示 |
-| **B4-region** | 出口 IP 属**不支持地区** | 强（官方明列"unsupported location"为封号原因） | **confirmed** | ✅ GeoIP（需联网 opt-in） | 建议性 | ✅ 中 |
+| **A3** | 非官方 / 魔改客户端伪造官方 Claude Code 身份（UA/header） | 强（官方证实触发 abuse filter） | **confirmed** | ⚠️ 只识别活动命令的已知官方分发路径，不能证明二进制完整性 | ✅ 用官方客户端 / API key | ✅ 高 |
+| **A3′** | CI 复制交互式登录，而非使用官方非交互认证 | 中 | reported | ✅ `CI` + 有效凭证优先级 | ✅ `setup-token` / API key | ⚠️ 提示 |
+| **B4-region** | 出口 IP 属**不支持地区** | 强（官方明列"unsupported location"为封号原因） | **confirmed** | ✅ GeoIP + 官方 allow-list（CLI 需 `--net`） | 建议性 | ✅ 中 |
 | **B4-dc** | 出口 IP 为**机房 ASN** → claude.ai OAuth 被 Cloudflare 拦 | 强（接入层，confirmed；非封号） | **confirmed** | ✅ ASN 查询（需联网） | ✅ 换住宅出口 | ⚠️ 提示（是"连不上"不是"封"） |
-| **B4-route** | **Node 默认网络栈**与双栈/curl 探测出口不一致 | 中（本机实测、影响 Node/CLI 工具地区判断与可达性） | reported | ✅（`--net` 下本机双探测） | ✅ 开 TUN / 显式 proxy env | ⚠️ 提示（路径卫生，不直接计分） |
+| **B4-route** | **Node 默认网络栈**与双栈/curl 探测出口不一致 | 中（本机实测、影响 Node/CLI 工具地区判断与可达性） | reported | ✅（`--net` 下本机双探测） | ✅ 开 TUN / 显式 proxy env | ⚠️ 路径提示 |
 | **B4-hop** | geo-hopping / 频繁切换国家节点 | 弱（机制合理但无一手证据） | speculative | ❌ | ❌ | ❌ 仅氛围展示 |
-| **M0-stego** | 日期行时区/hostname 隐写 | —— | **已证伪@2.1.201**（见 mechanism.md） | ✅ hex 复检 | —— | ❌ 不计分，仅"已体检未命中" |
+| **M0-stego** | 日期行时区/hostname 隐写 | —— | **已证伪@2.1.201**（见 mechanism.md） | ✅ hex 复检 | —— | ❌ 仅"已体检未命中" |
 | **AMB** | 浏览器时区/语言/字体/canvas 指纹 | 无（终端进程不参与） | 氛围 | Web 侧才相关 | —— | ❌ 明确标注"不影响 Claude Code" |
 
-> 计入风险分的只有：**A1 / A1′ / A2 / A2-bug / A3 / B4-region**。其余为提示 / 氛围，单独展示。
+> 只有 **A1 / A1′ / A2 / A2-bug / A3 / B4-region** 归入政策风险分类。其余为访问 / 路径 / 环境提示，仍可能使总结果进入 `ATTENTION`，但不会冒充账号封禁概率。
 
 ---
 
@@ -54,7 +54,9 @@
 
 **因果机制**：订阅 OAuth token 被设计为只服务官方 harness；非官方客户端/中转无法完整复刻官方握手与遥测 → 服务端判定"订阅凭证被非官方来源使用" → 命中条款 / abuse filter。汇聚型中转还有"同出口 + 多 token + 高并发 + 无遥测"的高辨识流量特征，并造成**同池交叉传染**（一个号触发风控，同出口其他号连坐）。
 
-**⚠️ 重要 nuance（防 FUD）**：**裸 API key（`sk-ant-api03-*`）通过中转/第三方工具使用是官方明确允许的**（The Register 引官方原话）。红线只对**订阅 OAuth**。所以 A1 检测必须先判凭证类型，再定风险等级。
+**⚠️ 重要 nuance（防 FUD）**：官方 [LLM gateway 文档](https://code.claude.com/docs/en/llm-gateway) 明确支持通过 `ANTHROPIC_BASE_URL` 配置网关，并记录 `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_API_KEY` 的认证方式。红线是第三方替用户转发 Free/Pro/Max 订阅凭证，不是网关变量本身。
+
+当前官方认证优先级（[Authentication](https://code.claude.com/docs/en/authentication)）：云提供商 → `ANTHROPIC_AUTH_TOKEN` → `ANTHROPIC_API_KEY` → `apiKeyHelper` → `CLAUDE_CODE_OAUTH_TOKEN` → 交互式登录。`claude setup-token` 生成的长效 token 应放在 `CLAUDE_CODE_OAUTH_TOKEN`，官方明确支持用于 CI / 脚本。
 
 ---
 
@@ -70,7 +72,7 @@
 
 **拼车秒封案例（reported）**：sub2api/CRS issue 区大量"多人共享秒封""2 小时被封"一手抱怨；知乎称 2026-03 起中转圈大清洗、10-50 人拼车"活不过 48 小时"。
 - https://github.com/Wei-Shaw/sub2api/issues/2781 · https://github.com/Wei-Shaw/sub2api/issues/1374 · https://zhuanlan.zhihu.com/p/2035004013914140693
-- ⚠️ 其中"prompt 风格熵 / 工作时间熵多人格检测"等机制说法 = **speculative**，不入分。
+- ⚠️ 其中"prompt 风格熵 / 工作时间熵多人格检测"等机制说法 = **speculative**，不归入政策风险。
 
 **A2-bug（confirmed，可测可修的实锤）**：环境里残留**被封 org 的 `ANTHROPIC_API_KEY`** 会**覆盖**有效的订阅登录，表现为"订阅也用不了"的假连坐。
 — https://github.com/anthropics/claude-code/issues/8327 → **检测项 + 一键修复（提示移除该 env）**。
@@ -81,7 +83,7 @@
 |---|---|---|
 | 第三方工具/中转中使用 | **官方允许** | **官方禁止**（Consumer Terms "Authentication and credential use"） |
 | 转售套利动机 | 弱（按量计费） | 强（月费 vs 按量差价）→ 风控重点 |
-| 技术封锁 | 无客户端指纹校验 | 服务端校验官方客户端指纹；`sk-ant-oat*` 已被 API 端点整体拒绝 |
+| 技术边界 | 可用于官方记录的 API / gateway 认证 | 应通过官方客户端，或按文档放在 `CLAUDE_CODE_OAUTH_TOKEN`；放错到通用 API/gateway 变量会失败或把凭证交给错误端点 |
 | 封禁粒度 | **org 级**（org 停用则该 org 所有 key 失效） | **账号级**（Web + Claude Code 一起失效） |
 
 ---
@@ -94,13 +96,13 @@
 - Thariq（Anthropic）公开声明 + VentureBeat 报道（同 A1）。
 - 服务端按**工具专属前缀**识别第三方工具：OpenCode PR 把前缀 `oc_`→`mcp_` 以绕过初期检测，反证 Anthropic 在按前缀/header 识别。
   — https://paddo.dev/blog/anthropic-walled-garden-crackdown/ · https://news.ycombinator.com/item?id=46625918
-- `sk-ant-oat*`（`claude setup-token` 产物）已被 API 端点整体拒绝：https://github.com/anthropics/claude-code/issues/28091
+- 历史 issue 记录了把 OAuth token 当通用 API 凭证时被拒绝：https://github.com/anthropics/claude-code/issues/28091。**这不等于 setup-token 已被禁用**；当前官方文档明确支持将其放在 `CLAUDE_CODE_OAUTH_TOKEN` 用于 CI / 脚本。
 
 **因果链（confirmed）**：第三方客户端用订阅 OAuth → 发伪造 header 冒充官方 binary → 无官方遥测 + 异常流量 → 触发 abuse filter → 自动封号（含误伤 → 官方回滚）。
 
-**speculative（不入分）**：具体封哪些 UA 字符串、TLS/JA3 指纹、beta header 精确清单——各来源均称未披露。
+**speculative（不归入政策风险）**：具体封哪些 UA 字符串、TLS/JA3 指纹、beta header 精确清单——各来源均称未披露。
 
-**A3′ 自动化滥用（reported）**：abuse filter 确实存在（官方用词），但阈值 / 并发 / 速率触发条件**未公开**。本地无法量化 → 只作提示，不编造数字。
+**A3′ 自动化边界（reported）**：abuse filter 存在，但阈值 / 并发 / 速率触发条件**未公开**，本地无法量化。工具只检查 CI 是否错误复用交互式登录，并引导到官方 `setup-token` / API key；不会把官方支持的 `CLAUDE_CODE_OAUTH_TOKEN` 误报为自动化违规。
 
 **官方条款（confirmed）** — AUP："Intentionally bypass capabilities, restrictions, or guardrails…"、"Coordinate malicious activity across multiple accounts…"、"Utilize automation in account creation or to engage in spammy behavior"、"Circumvent a ban through the use of a different account…" — https://www.anthropic.com/legal/aup
 
@@ -119,9 +121,9 @@
 
 **reported**：企业 VPN + Max 付费用户被封（claude-code#51583）；开 VPN 1 小时后被封（HN Ask HN #48641160）。封号是真的，"VPN 是原因"是用户推测。
 
-**speculative（不入分，防 FUD）**："1 小时切美/日/港节点必封""IP 占封号原因 60%""申诉成功率 3.3%"——全部出自 VPN 厂商 / 中转商 / 防指纹浏览器引流文，无出处、有变现动机。
+**speculative（不归入政策风险，防 FUD）**："1 小时切美/日/港节点必封""IP 占封号原因 60%""申诉成功率 3.3%"——全部出自 VPN 厂商 / 中转商 / 防指纹浏览器引流文，无出处、有变现动机。
 
-**落地**：`B4-region`（出口 IP 是否官方支持地区）与 `B4-dc`（是否机房 ASN，影响 OAuth 可达性）有因果、可检测、可开药；`B4-route` 用本机实测识别"浏览器/部分 curl 已出海，但 Node/CLI 工具仍直连本地"的代理路径不一致；`B4-hop` 只作氛围提示。**全部需联网查询 → 默认关闭，显式 opt-in（`--net` / `--online`），符合"默认 100% 本地"隐私原则。**
+**落地**：`B4-region`（出口 IP 是否官方支持地区）与 `B4-dc`（是否机房 ASN，影响 OAuth 可达性）有因果、可检测、可开药；`B4-route` 用本机实测识别"浏览器/部分 curl 已出海，但 Node/CLI 工具仍直连本地"的代理路径不一致；`B4-hop` 只作氛围提示。**CLI 的这些查询默认关闭，显式传 `--net` / `--online` 才执行；Web 为即时结果自动查询，并在界面中明确第三方数据源和检测边界。**
 
 ### B4-route · Node / CLI 代理路径不一致（reported，本机实测）
 
@@ -136,7 +138,7 @@
 - `--net` 下同时做两类探测：
   - **双栈/curl 路径**：`curl -4/-6` 强制 IPv4/IPv6，看网络层真实出口；
   - **当前 Node 运行时路径**：当前进程的默认 `fetch` 看到什么出口。
-- 如果两者国家/IP 不一致，就提示 `B4-route`，但**不计入健康分**。它是"路径卫生"而非官方封号条款。
+- 如果两者国家/IP 不一致，就提示 `B4-route`。它属于"路径卫生"而非官方封号条款；若探测到实际不支持地区，会让总结果进入 `ATTENTION`。
 
 **药方**
 - 最稳：开启代理客户端 **TUN mode**
@@ -162,15 +164,15 @@
 
 ## 4. 对 M0 结论的交叉印证
 
-四份独立取证（A1/A2/A3/B4）**一致**把中文社区的"时区/域名黑名单/`Today's date` 撇号隐写"标为 **speculative、未经 Anthropic 证实、且属与凭证机制不同的另一条**。这与本项目 M0 的字节级结论（`mechanism.md`：该机制在 2.1.201 **已证伪**）一致。→ **日期行隐写不计入风险分，仅作"已体检未命中"展示。**
+四份独立取证（A1/A2/A3/B4）**一致**把中文社区的"时区/域名黑名单/`Today's date` 撇号隐写"标为 **speculative、未经 Anthropic 证实、且属与凭证机制不同的另一条**。这与本项目 M0 的字节级结论（`mechanism.md`：该机制在 2.1.201 **已证伪**）一致。→ **日期行隐写不归入政策风险，仅作"已体检未命中"展示。**
 
 ---
 
 ## 5. 给 M1 的实现约束
 
-1. **凭证类型判定是一切的前置**：先分清"裸 API key" vs "订阅 OAuth" vs "混用"，A1/A2/A3 的风险等级完全依赖它（裸 key 过中转合规，订阅 OAuth 过中转是红线）。
-2. **只对 confirmed/reported 且有本地因果的信号开药**；speculative 只展示不评分。
-3. **联网检测（B4）默认关闭**，`--net` 显式开启；不上传任何环境数据。
+1. **有效凭证优先级判定是一切的前置**：按官方顺序处理云提供商、bearer gateway token、API key、`apiKeyHelper`、`CLAUDE_CODE_OAUTH_TOKEN` 与交互登录；不能根据“某个凭证存在”就假设它实际生效。
+2. **只对 confirmed/reported 且有本地因果的信号开药**；speculative 只展示，不形成政策结论。
+3. **CLI 联网检测（B4）默认关闭**，`--net` 显式开启；不上传任何环境或凭证数据。
 4. **文案防 FUD**：区分"访问被拒"（机房 IP/地区）与"账号被封"（订阅凭证脱离官方客户端）；明说"误伤存在、官方会解封"。
 5. 每条结论在 CLI 输出里都带 confidence + 出处（可 `--why` 展开）。
 
@@ -192,18 +194,18 @@
 
 ### 6.2 时区（三段式，见 mechanism.md）
 
-网传"中国时区被针对"**并非纯空穴来风，也不是"一开中国时区就秒封"**。准确定性：`Asia/Shanghai` + 非官方中转 hostname 命中中国域名/AI 实验室清单 这个**组合**，曾被 Anthropic 用作**反滥用/反蒸馏的画像标记**（官方承认，2.1.91→，已于 2026-07 移除）。→ "时区作为风险画像相关因子"有官方背书；具体隐写实现已移除且我们复检证实。**时区仍只作氛围/画像因子展示，不进因果风险分。**
+网传"中国时区被针对"**并非纯空穴来风，也不是"一开中国时区就秒封"**。准确定性：`Asia/Shanghai` + 非官方中转 hostname 命中中国域名/AI 实验室清单 这个**组合**，曾被 Anthropic 用作**反滥用/反蒸馏的画像标记**（官方承认，2.1.91→，已于 2026-07 移除）。→ "时区作为风险画像相关因子"有官方背书；具体隐写实现已移除且我们复检证实。**时区仍只作氛围/画像因子展示，不归入政策风险。**
 
 ### 6.3 自动化 / 超人类用量（reported，官方点名此类模式）
 
-"非交互 + SDK 入口 + 高频 + 高 token"像 bot 而非人类，易触发 abuse filter；官方立场是这类用法改用 **API key**。→ 本地可检测 `CI=true`/无 TTY 叠加订阅凭证并提示合规迁移。
+官方当前提供两条明确的非交互路径：**API key**，或 `claude setup-token` 生成并放在 `CLAUDE_CODE_OAUTH_TOKEN` 的长效 token。→ 本地只对 `CI=true` 且复用交互式登录文件的情况提示迁移，不对官方 setup-token 制造风险结论。
 
 ### 6.4 本地可落地的新检测项（安全、不越界、可开药）
 
-| ID | 检测项 | 本地安全获取 | 计分 | 状态 |
+| ID | 检测项 | 本地安全获取 | 分类 | 状态 |
 |---|---|---|---|---|
-| **A5-device-transparency** | 读 `~/.claude.json`/statsig/telemetry，透明展示"本地 vs 出站"身份；提示"同机长期多订阅号=号池画像之一" | ✅ 只读、不外传、不读 token 明文 | 不计分（reported 提示） | 建议实现 |
-| **A6-automation** | `CI`/非交互 + 订阅凭证 → 提示改用 API key | ✅ | 低权重提示 | 建议实现 |
+| **A5-device-transparency** | 读 `~/.claude.json`/statsig/telemetry，透明展示"本地 vs 出站"身份；提示"同机长期多订阅号=号池画像之一" | ✅ 只读、不外传、不读 token 明文 | reported 提示 | 已实现 |
+| **A6-automation** | `CI` + 交互式登录 → 提示改用 `CLAUDE_CODE_OAUTH_TOKEN` / API key | ✅ | 提示 | 已实现 |
 | **A7-register-consistency** | 用户可选填注册国，与当前出口 geo 对比（触达"注册地=confirmed 封号因"） | ✅ 纯本地对比 | reported | 可选 |
 | **B4+ ASN 富化** | 展示原始 ASN/org/rDNS，判断"服务端看像住宅还是机房/中转" | ✅（已有 probe 字段） | 信息增强 | 快速可做 |
 | **设备清单深链** | 引导去官方 Active Sessions 自查 | ✅ 只给链接 | —— | 建议实现 |
