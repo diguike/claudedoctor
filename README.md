@@ -78,6 +78,24 @@ node packages/cli/bin/claudedoctor.mjs check
 pnpm -F @claudedoctor/web dev      # → http://localhost:4321
 ```
 
+## 🧹 Safe local cache reset
+
+[`scripts/reset-claude-cache.sh`](./scripts/reset-claude-cache.sh) resets only an explicit
+allowlist of regenerable Claude Code/Desktop caches. It defaults to preview mode and moves files
+to a private, timestamped backup instead of deleting them. Quit Claude Code and Claude Desktop
+before applying it:
+
+```bash
+bash scripts/reset-claude-cache.sh           # preview
+bash scripts/reset-claude-cache.sh --apply   # confirm, then move to backup
+```
+
+It deliberately preserves plugins, skills, hooks, settings, credentials, conversations, projects,
+tasks, history, file-history and backups. It never uses `sudo` or changes machine identity, Git
+configuration, shell profiles, Claude.app, or Desktop Application Support.
+If an individual move fails, the script stops and points to a `manifest.tsv` journal containing
+both planned and completed moves, so a partial run remains inspectable and recoverable.
+
 See [`CLAUDE.md`](./CLAUDE.md) for the design rules, [`docs/mechanism.md`](./docs/mechanism.md)
 (byte-level forensics ledger) and [`docs/ban-signals.md`](./docs/ban-signals.md) (ban-signal evidence).
 
@@ -105,6 +123,23 @@ claudedoctor check --net     # + 出口 IP / 地区 / VPN / 代理 / 机房（�
 claudedoctor fix             # 交互勾选并应用修复（写入 shell profile 托管块，可 --revert 撤销）
 claudedoctor verify          # 字节级复检日期行 + 复跑体检
 ```
+
+**安全清缓存：**
+
+仓库内的 [`scripts/reset-claude-cache.sh`](./scripts/reset-claude-cache.sh) 只处理明确列入白名单、
+可以重新生成的缓存。默认只预览；执行时也只是把文件移动到私有、带时间戳的备份目录，不直接
+删除。执行前请先退出 Claude Code 和 Claude Desktop：
+
+```bash
+bash scripts/reset-claude-cache.sh           # 预览
+bash scripts/reset-claude-cache.sh --apply   # 确认后移动到备份
+```
+
+脚本明确保留 plugins、skills、hooks、配置、登录凭据、历史会话、projects、tasks、file-history
+和 backups；不会使用 `sudo`，也不会修改机器标识、Git、shell profile、Claude.app 或 Desktop
+Application Support。
+如果中途某项移动失败，脚本会立即停止，并通过 `manifest.tsv` 记录计划移动和已经完成的项目，
+方便检查 partial run 和恢复。
 
 命令行给**本地 Claude Code**（终端进程）体检；Web 端给**浏览器 Claude** 体检，作科普与引流。
 **默认 100% 本地**，不上传任何环境数据；凭证只做分类，原文永不外泄。只帮真实用户降低误伤，
