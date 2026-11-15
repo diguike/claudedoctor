@@ -2,10 +2,15 @@
  * Opt-in IP-intelligence probe (B4). Off by default — honoring "100% local
  * unless the user asks". Pluggable providers, richest-first:
  *
- *  - `ipapi.is` (default) — free, NO key. Returns is_vpn / is_proxy / is_tor /
- *                is_datacenter / is_abuser + country + company. This is the
- *                keyless equivalent of a paid IP-intel API — no signup friction.
- *  - `ipdata`  — used only if you set IPDATA_API_KEY (BYO key). We never ship or
+ *  - `ipapi.is` — free, no key. Its full response carries is_vpn / is_proxy /
+ *                is_tor / is_datacenter / is_abuser + country + company. Since
+ *                2026-11 the keyless response is a reduced one without a country
+ *                code or any flag, so it is tried first and usually yields nothing.
+ *  - `ipdata.free` — ipdata's keyless endpoint: country code, ASN and operator,
+ *                no reputation flags. This is what answers the region question
+ *                today; reputation fields stay null ("provider didn't say").
+ *  - `ipdata`  — used only if you set IPDATA_API_KEY (BYO key). The only path
+ *                that currently returns VPN / proxy / datacenter flags. We never ship or
  *                scrape a key; ipdata's site works keyless only because it embeds
  *                its own referer-locked key, which we can't reuse from our origin.
  *
@@ -109,6 +114,41 @@ async function probeIpApiIs(timeoutMs: number, family?: IpFamily): Promise<Probe
   };
 }
 
+/* ---- provider: ipdata.free (keyless: region + operator only) ---- */
+interface IpDataFreeResponse {
+  ip?: string;
+  country?: string;
+  asn?: string;
+  org?: string;
+}
+
+async function probeIpDataFree(timeoutMs: number, family?: IpFamily): Promise<ProbeResult> {
+  const url = 'https://ipdata.free/';
+  const d = family ? await fetchJsonViaCurl<IpDataFreeResponse>(url, timeoutMs, family) : await fetchJson<IpDataFreeResponse>(url, timeoutMs);
+  if (!d || typeof d.country !== 'string' || !/^[A-Za-z]{2}$/.test(d.country)) return null;
+  const cc = d.country.toUpperCase();
+  return {
+    family: actualFamily(d.ip, family),
+    provider: 'ipdata.free',
+    egressIp: d.ip ?? null,
+    countryCode: cc,
+    countryName: null,
+    isSupportedRegion: supported(cc),
+    asnType: 'unknown',
+    asnOrg: d.org || d.asn || null,
+    isProxy: null,
+    isTor: null,
+    isHosting: null,
+    isMobile: null,
+    threatLevel: null,
+  };
+}
+
+/** Keyless lookup: the richer source first, then the one that still answers the region. */
+async function probeKeyless(timeoutMs: number, family?: IpFamily): Promise<ProbeResult> {
+  return (await probeIpApiIs(timeoutMs, family)) ?? (await probeIpDataFree(timeoutMs, family));
+}
+
 /* ---- provider: ipdata (optional, BYO key) ---- */
 interface IpDataResponse {
   ip?: string;
@@ -194,7 +234,7 @@ async function probeFamily(timeoutMs: number, family: IpFamily): Promise<ProbeRe
   // Keep a BYO ipdata key out of `curl` argv (visible to other local users via
   // the process list). Family probes therefore always use the keyless provider;
   // ipdata is only used by the in-process runtime probe below.
-  return probeIpApiIs(timeoutMs, family);
+  return probeKeyless(timeoutMs, family);
 }
 
 /**
@@ -208,8 +248,7 @@ async function probeRuntimePath(timeoutMs: number): Promise<ProbeResult> {
     const viaIpData = await probeIpData(key, timeoutMs);
     if (viaIpData) return viaIpData;
   }
-  const viaIpApiIs = await probeIpApiIs(timeoutMs);
-  return viaIpApiIs;
+  return probeKeyless(timeoutMs);
 }
 
 /** Probe with the richest available provider. */
@@ -231,6 +270,6 @@ export async function probeNetwork(timeoutMs = 6000): Promise<NetworkInfo | null
 /** Which provider a probe would use, for honest disclosure before it runs. */
 export function activeProviderName(): string {
   return process.env.IPDATA_API_KEY
-    ? 'ipapi.is（双栈）+ ipdata.co（运行时路径·你的 key）'
-    : 'ipapi.is（免费·免 key）';
+    ? 'ipapi.is / ipdata.free（双栈）+ ipdata.co（运行时路径·你的 key）'
+    : 'ipapi.is 和 ipdata.free（免 key）';
 }

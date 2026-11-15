@@ -15,6 +15,7 @@ All notable changes are documented here. The project follows semantic versioning
 
 ### Changed
 
+- `check --net` falls back to ipdata's keyless endpoint, so the egress region is reported again; VPN / proxy / datacenter flags now need your own `IPDATA_API_KEY`
 - Web browser check now uses ipdata's keyless endpoint for region and operator, after ipapi.is dropped region codes and reputation flags from keyless responses; IP reputation links out to ipdata.co
 - Web browser check redesigned as a coloured status band with result tiles
 - Model current Claude Code authentication precedence, including cloud providers, `apiKeyHelper`, and the official `CLAUDE_CODE_OAUTH_TOKEN` flow

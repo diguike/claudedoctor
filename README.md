@@ -7,178 +7,162 @@
 
 # Claude Doctor
 
-**Evidence-first diagnostics for Claude Code: check, fix, verify.**<br>
-**把政策风险、访问问题与环境信息分开判断，不把不确定性伪装成精确分数。**
+A health check for your Claude Code setup. It finds what is wrong, fixes what it safely can, and checks again.
 
 [![CI](https://github.com/diguike/claudedoctor/actions/workflows/ci.yml/badge.svg)](https://github.com/diguike/claudedoctor/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@diguike/claudedoctor?logo=npm&color=CB3837)](https://www.npmjs.com/package/@diguike/claudedoctor)
-[![downloads](https://img.shields.io/npm/dm/@diguike/claudedoctor?color=16885B)](https://www.npmjs.com/package/@diguike/claudedoctor)
 [![node](https://img.shields.io/node/v/@diguike/claudedoctor?logo=node.js&logoColor=white)](https://nodejs.org)
 [![license](https://img.shields.io/github/license/diguike/claudedoctor)](LICENSE)
 
-[Live browser check](https://claudedoctor.pages.dev) · [Evidence ledger](docs/ban-signals.md) · [Threat model](docs/threat-model.md)
+[Website](https://claudedoctor.pages.dev) · [中文](#中文)
 
 </div>
 
-> [!IMPORTANT]
-> A clean result means Claude Doctor found no known issue in the dimensions it could observe. It is not a suspension probability, a guarantee of account safety, or an explanation of Anthropic's private enforcement systems.
-
-## Quick start
+## Install
 
 ```bash
 npm install --global @diguike/claudedoctor
-
-claudedoctor                 # local check; no network call
-claudedoctor check --why     # include reasoning and sources
-claudedoctor check --net     # add egress region and IP intelligence
-claudedoctor fix             # preview/select reversible remediations
-claudedoctor verify          # byte-level date-line check + full re-check
-claudedoctor env --json      # sanitized environment snapshot
 ```
 
-`cdoc` is a short alias for `claudedoctor`. Exit codes are stable for automation:
+Needs Node.js 20 or newer. The command is `claudedoctor`; `cdoc` is the same thing, shorter.
 
-| Code | Meaning |
-|---:|---|
-| `0` | No risk or warning found in completed checks |
-| `1` | Attention required, including access/path hygiene or an incomplete requested probe |
-| `2` | Confirmed policy-risk vector detected |
-| `64` | Invalid command or option |
-
-Use `--json` for schema-versioned machine output.
-
-## What it checks
-
-| Area | Current capability | Boundary |
-|---|---|---|
-| Authentication | Models documented precedence: cloud provider, bearer gateway token, API key, `apiKeyHelper`, `CLAUDE_CODE_OAUTH_TOKEN`, interactive login | Secret values are classified locally and never enter Core or output |
-| Relay policy | Detects subscription credentials routed to a non-first-party `ANTHROPIC_BASE_URL` | API-key gateways are supported; host-name heuristics remain `reported` |
-| Client source | Resolves the active `claude` command and recognizes native, Homebrew, WinGet, and npm distribution paths | Path/version recognition is not signature or hash verification |
-| Region policy | Compares egress ISO code with the current official supported-region allow-list | Requires `--net`; country-level data cannot evaluate subnational exceptions |
-| IP access/reputation | Reports datacenter, VPN/proxy, Tor, abuse, ASN, and IPv4/IPv6 differences | Third-party intelligence can be wrong; these are access/reputation notices, not direct ban claims |
-| Local path hygiene | Checks proxy environment, system proxy/TUN routes, and supported Clash/Mihomo configuration shapes | Platform- and client-specific; recommendations do not prove the final route |
-| Date-line forensics | Captures the real outbound date line locally and checks both apostrophe and separator bytes | The historical marker is removed in verified versions; a regression causes `ATTENTION` but is not labeled a policy-risk vector |
-
-The evidence class on every finding is one of `confirmed`, `reported`, or `speculative`. `WARN` always affects the health summary; the separate `scored` field indicates whether a finding is an account-policy vector rather than an access/context issue.
-
-## Check → fix → verify
-
-`fix` writes only to a clearly delimited managed block in the selected shell profile. Existing profile content is preserved, every edit receives a timestamped backup, values are shell-quoted, and `fix --revert` removes the block.
+## Use
 
 ```bash
-claudedoctor fix --dry-run   # never writes
-claudedoctor fix             # interactive selection
-claudedoctor fix --all       # apply every safe automatic remediation
-claudedoctor fix --session   # print POSIX shell commands; no file write
-claudedoctor fix --revert    # remove the managed block
+claudedoctor                # check this machine; nothing leaves it
+claudedoctor check --net    # also look up where your terminal exits
+claudedoctor check --why    # show the reasoning behind each line
+claudedoctor fix            # pick fixes and apply them
+claudedoctor verify         # check again after fixing
+claudedoctor reset          # preview a cache reset; add --apply to do it
+claudedoctor env --json     # print what the tool sees, with secrets removed
 ```
 
-Network and advisory findings that cannot be changed safely are shown as manual actions instead of being silently dropped.
+A typical run is `check`, then `fix`, then `verify` in a new terminal.
+
+## What it looks at
+
+- **Which credential is in use.** Claude Code can pick up an API key, a gateway token, a helper script, or your subscription login. An old `ANTHROPIC_API_KEY` in your shell often overrides the login you meant to use.
+- **Relays.** Whether your subscription login is being sent to an address that is not Anthropic's.
+- **Which `claude` you are running.** Native installer, Homebrew, WinGet, or npm. This is a path check, not a signature check.
+- **Where your traffic exits** (`--net`). The region, and whether it is on Anthropic's supported list. IPv4 and IPv6 are checked separately, and so is the path Node itself uses, because a system proxy often covers the browser and not the terminal.
+- **Proxy setup.** Proxy environment variables, system proxy and TUN state, and common Clash / Mihomo configurations.
+
+Each line in the report says how sure it is: `confirmed`, `reported`, or `speculative`.
+
+Without a key, `--net` reports region and network operator only. To also see VPN, proxy, and datacenter flags, set `IPDATA_API_KEY` to your own [ipdata.co](https://ipdata.co/) key.
+
+## Fixing
+
+`fix` only writes one marked block in your shell profile. It backs the file up first, and `claudedoctor fix --revert` removes the block.
+
+```bash
+claudedoctor fix --dry-run   # show what would change
+claudedoctor fix --all       # apply everything that can be applied safely
+claudedoctor fix --session   # print the commands instead of writing a file
+```
+
+Problems it cannot change for you, such as your network, are listed with the steps to do by hand.
+
+## Resetting local caches
+
+Useful after switching accounts. `claudedoctor reset` lists the caches it would move; `claudedoctor reset --apply` moves them into `~/.claudedoctor-cleanup-backups/`. Nothing is deleted. Quit Claude Code and Claude Desktop first.
+
+It leaves your login, settings, skills, plugins, hooks, conversations, and projects alone.
+
+If you only want the script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/diguike/claudedoctor/main/scripts/reset-claude-cache.sh -o reset-claude-cache.sh
+bash reset-claude-cache.sh           # preview
+bash reset-claude-cache.sh --apply   # move to backup
+```
+
+## Clash setup skill
+
+[`skills/claude-isp-clash`](./skills/claude-isp-clash/SKILL.md) is a skill for Claude Code and similar agents. It builds a Clash Verge profile that sends Claude's traffic through your own static ISP node, leaves other traffic on its usual route, and then checks that the routing works.
+
+```bash
+mkdir -p ~/.claude/skills/claude-isp-clash
+curl -fsSL https://raw.githubusercontent.com/diguike/claudedoctor/main/skills/claude-isp-clash/SKILL.md \
+  -o ~/.claude/skills/claude-isp-clash/SKILL.md
+```
 
 ## Privacy
 
-- `check`, `fix`, and `env` are local by default.
-- Raw credentials are never printed, logged, or passed into `@claudedoctor/core`.
-- CLI network checks run only with `--net` and disclose the public egress IP to ipapi.is. If `IPDATA_API_KEY` is set, the in-process runtime-path probe may also use ipdata; the key is never placed in `curl` arguments.
-- The public Web UI automatically contacts ipify, ipdata (`ipdata.free`), and ipapi.is to render its browser-side network check. It cannot see local credentials, Claude configuration, or the active terminal route.
-- Failed observation is `WARN`/`UNKNOWN`, never a fabricated clean result or sample score.
+- Everything runs locally unless you pass `--net`.
+- `--net` sends your public IP to ipapi.is and ipdata. Nothing else is sent.
+- Credentials are only classified by type. Their values are never printed or logged.
+- The website checks the browser you open it in. It cannot see your terminal, your credentials, or your Claude configuration.
 
-See the full [threat model and explicit non-goals](docs/threat-model.md).
+## Exit codes
 
-## Platform status
+| Code | Meaning |
+|---:|---|
+| `0` | Nothing found |
+| `1` | Something needs attention, or a requested check could not finish |
+| `2` | A confirmed policy risk |
+| `64` | Bad command or option |
 
-| Platform | Status |
+`--json` gives the same result in a versioned format for scripts.
+
+## Platforms
+
+| Platform | What works |
 |---|---|
-| macOS | Full credential, client-source, shell-profile, local proxy, and network probes |
-| Linux / WSL | Credential, client-source, shell-profile, and network probes; route/client-specific proxy parsing is best effort |
-| Windows | Credential, client-source, and network checks; automatic profile fixes are intended for Git Bash/WSL until native PowerShell support lands |
+| macOS | Everything |
+| Linux / WSL | Everything; proxy detection covers fewer clients |
+| Windows | Checks work; `fix` needs Git Bash or WSL |
 
-Node.js 20 or newer is required.
+## Limits
 
-## Repository
+A clean report means none of the known problems were found. It does not predict what happens to an account, and it does not describe how Anthropic enforces its policies. Notes on what has and has not been verified are in [`docs/`](./docs).
 
-```text
-packages/
-├── core/   pure sanitized-input → findings logic; no I/O
-├── cli/    local collectors, network/byte probes, rendering, reversible fixes
-└── web/    static browser check; region data generated from Core at build time
-```
+Claude Doctor is not affiliated with Anthropic.
+
+## Development
 
 ```bash
 corepack enable
 pnpm install --frozen-lockfile
-pnpm validate               # typecheck + tests + Web build + npm tarball audit
-pnpm dev:web                # http://localhost:4321
+pnpm validate     # typecheck, tests, web build, package audit
+pnpm dev:web      # http://localhost:4321
 ```
 
-The test suite locks down credential precedence, unsupported-region coverage, warning summaries, byte verification, invalid flags, and shell escaping. CI runs on Node 20 and 22. The npm tarball audit verifies required files, license inclusion, source exclusion, and package size.
+`packages/core` holds the diagnosis logic, `packages/cli` the command, `packages/web` the site. See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
-## 🧹 Safe local cache reset
+## 中文
 
-[`scripts/reset-claude-cache.sh`](./scripts/reset-claude-cache.sh) resets only an explicit
-allowlist of regenerable Claude Code/Desktop caches. It defaults to preview mode and moves files
-to a private, timestamped backup instead of deleting them. Quit Claude Code and Claude Desktop
-before applying it:
+Claude Doctor 给本机的 Claude Code 做体检：查出问题，能自动改的帮你改，改完再查一遍。
 
 ```bash
-bash scripts/reset-claude-cache.sh           # preview
-bash scripts/reset-claude-cache.sh --apply   # confirm, then move to backup
+npm install --global @diguike/claudedoctor
+
+claudedoctor                # 体检本机，不联网
+claudedoctor check --net    # 加查终端的出口地区
+claudedoctor fix            # 选择并应用修复
+claudedoctor verify         # 改完复查
+claudedoctor reset          # 预览清缓存，加 --apply 才执行
 ```
 
-The same reset is built into the CLI as `claudedoctor reset` (preview) and
-`claudedoctor reset --apply`.
+它会看这几样：
 
-It deliberately preserves plugins, skills, hooks, settings, credentials, conversations, projects,
-tasks, history, file-history and backups. It never uses `sudo` or changes machine identity, Git
-configuration, shell profiles, Claude.app, or Desktop Application Support.
-If an individual move fails, the script stops and points to a `manifest.tsv` journal containing
-both planned and completed moves, so a partial run remains inspectable and recoverable.
+- **实际生效的凭证。** 环境里残留的 `ANTHROPIC_API_KEY` 经常盖过订阅登录。
+- **中转。** 订阅登录有没有被发到非官方地址。
+- **客户端来源。** 你运行的 `claude` 是从哪里装的。
+- **出口**（`--net`）。地区是否受支持；IPv4、IPv6 和 Node 自己走的路径分开查。
+- **代理设置。** 代理环境变量、系统代理、TUN，以及常见的 Clash / Mihomo 配置。
 
-See [`CLAUDE.md`](./CLAUDE.md) for the design rules, [`docs/mechanism.md`](./docs/mechanism.md)
-(byte-level forensics ledger) and [`docs/ban-signals.md`](./docs/ban-signals.md) (ban-signal evidence).
+免 key 的情况下，`--net` 只能查到出口地区和运营方。想看 VPN、代理、机房标记，把 `IPDATA_API_KEY` 设成你自己的 [ipdata.co](https://ipdata.co/) key。
 
-## Clash setup skill
+换账号之后可以用 `claudedoctor reset` 清掉本机的旧缓存。文件是移到 `~/.claudedoctor-cleanup-backups/`，不会删除；登录状态、配置、skills 和会话记录都不动。只想要脚本的话，直接用 [`scripts/reset-claude-cache.sh`](./scripts/reset-claude-cache.sh)。
 
-[`skills/claude-isp-clash`](./skills/claude-isp-clash/SKILL.md) is an agent skill that builds and
-verifies a Clash Verge profile routing Claude's first-party domains through your own static ISP
-node while other traffic keeps its usual route. Copy the folder into `~/.claude/skills/` (or your
-agent's skills directory) and ask the agent to use it.
+买了静态 ISP 代理之后怎么配 Clash，见 [`skills/claude-isp-clash`](./skills/claude-isp-clash/SKILL.md)，装进 Claude Code 后让它按你的节点生成配置。
 
-## Contributing and security
+网页版在 [claudedoctor.pages.dev](https://claudedoctor.pages.dev)，打开就会检查当前浏览器的出口。它看不到你的终端和本地配置。
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing a detector. Bug reports and feature requests use structured templates so evidence and privacy impact are explicit. Report vulnerabilities privately using [SECURITY.md](SECURITY.md).
-
-Claude Doctor is independent open-source software and is not affiliated with or endorsed by Anthropic. It does not provide ban evasion, identity spoofing, account pooling, traffic shaping, or safeguard bypass features.
-
-## 中文摘要
-
-Claude Doctor 的核心不是“给中国用户打分”，而是把三件事拆开：
-
-1. **政策风险**：例如订阅凭证是否被送到非官方端点。
-2. **访问/信誉问题**：例如不支持地区、机房 IP、VPN/代理/Tor 标签与双栈路径差异。
-3. **环境信息**：例如当前时区、遥测文件和本地身份是否存在，明确不混入封禁结论。
-
-默认检查不联网；`--net` 才查询出口。网页为了即时传播和体验会自动做浏览器侧联网检测，但它看不到本地凭证和终端真实配置。所有结论都保留证据等级、检测边界和复检方式。
-
-**安全清缓存：**
-
-仓库内的 [`scripts/reset-claude-cache.sh`](./scripts/reset-claude-cache.sh) 只处理明确列入白名单、
-可以重新生成的缓存。默认只预览；执行时也只是把文件移动到私有、带时间戳的备份目录，不直接
-删除。执行前请先退出 Claude Code 和 Claude Desktop：
-
-```bash
-bash scripts/reset-claude-cache.sh           # 预览
-bash scripts/reset-claude-cache.sh --apply   # 确认后移动到备份
-```
-
-命令行里也有同样的功能：`claudedoctor reset`（预览）和 `claudedoctor reset --apply`。
-
-脚本明确保留 plugins、skills、hooks、配置、登录凭据、历史会话、projects、tasks、file-history
-和 backups；不会使用 `sudo`，也不会修改机器标识、Git、shell profile、Claude.app 或 Desktop
-Application Support。
-如果中途某项移动失败，脚本会立即停止，并通过 `manifest.tsv` 记录计划移动和已经完成的项目，
-方便检查 partial run 和恢复。
+体检通过只表示没有发现已知问题，不代表账号一定不会受限。本项目与 Anthropic 无关。
 
 ## License
 
-MIT © [递归客](https://github.com/diguike)
+MIT © [递归客](https://diguike.dev/)

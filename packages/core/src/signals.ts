@@ -710,7 +710,7 @@ const networkProbe: Detector = (i) => {
     fix: {
       kind: 'network',
       title: '检查基础联网后重试',
-      commands: ['curl -fsS https://api.ipapi.is/'],
+      commands: ['curl -fsS https://ipdata.free/'],
       note: '确认命令返回 JSON 后，再运行 claudedoctor check --net。',
     },
   };

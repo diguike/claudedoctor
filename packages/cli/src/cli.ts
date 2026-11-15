@@ -88,7 +88,7 @@ async function buildInput(flags: Flags): Promise<DoctorInput> {
         pc.dim(`   （--net 已开启：将通过 ${activeProviderName()} 查询出口 IP/地区/代理，这会把你的 IP 告知该第三方）\n`),
       );
       if (!process.env.IPDATA_API_KEY) {
-        process.stderr.write(pc.dim('   （默认已含 VPN/代理/机房/威胁判定，无需任何 key；如想改用 ipdata.co 可设 IPDATA_API_KEY）\n'));
+        process.stderr.write(pc.dim('   （免 key 只能查到出口地区和运营方；要看 VPN/代理/机房标记，可设 IPDATA_API_KEY 使用你自己的 ipdata.co key）\n'));
       }
     }
     input.network = await probeNetwork();
