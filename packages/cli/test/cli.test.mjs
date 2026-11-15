@@ -8,6 +8,8 @@ import { parseFlags } from '../dist/cli.js';
 import { collect, detectClashConfig, resolvePrimaryKind } from '../dist/collect.js';
 import { actualFamily, aggregateFamilyResults } from '../dist/probe.js';
 import { extractDateLine } from '../dist/verify.js';
+import { applyReset, planReset } from '../dist/reset.js';
+import { existsSync, mkdirSync, readFileSync as readSync, symlinkSync, writeFileSync as writeSync } from 'node:fs';
 
 test('rejects unknown CLI options instead of silently ignoring them', () => {
   const parsed = parseFlags(['check', '--definitely-invalid']);
@@ -144,4 +146,41 @@ test('labels address families from the returned IP instead of the requested curl
   assert.equal(result?.selectedFamily, 'ipv4');
   assert.equal(result?.families?.ipv4?.egressIp, '203.0.113.7');
   assert.equal(result?.families?.ipv6, null);
+});
+
+test('reset moves only allowlisted caches into a recoverable backup', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'cdoc-reset-'));
+  try {
+    mkdirSync(join(home, '.claude', 'cache'), { recursive: true });
+    writeSync(join(home, '.claude', 'cache', 'a.bin'), 'x');
+    writeSync(join(home, '.claude', 'stats-cache.json'), '{}');
+    writeSync(join(home, '.claude', '.credentials.json'), 'secret');
+    mkdirSync(join(home, '.claude', 'projects'));
+    const plan = planReset(home, 'linux');
+    assert.deepEqual(plan.targets, ['.claude/cache', '.claude/stats-cache.json']);
+    assert.ok(existsSync(join(home, '.claude', 'cache')), 'planning changes nothing');
+    const result = applyReset(plan);
+    assert.deepEqual(result.moved, plan.targets);
+    assert.ok(!existsSync(join(home, '.claude', 'cache')));
+    assert.ok(existsSync(join(result.backupDir, '.claude', 'cache', 'a.bin')));
+    assert.ok(existsSync(join(home, '.claude', '.credentials.json')), 'credentials are never touched');
+    assert.ok(existsSync(join(home, '.claude', 'projects')), 'projects are never touched');
+    assert.match(readSync(result.manifest, 'utf8'), /moved\t.*stats-cache\.json/);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('reset refuses a target under a symlinked parent', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'cdoc-reset-'));
+  const elsewhere = await mkdtemp(join(tmpdir(), 'cdoc-else-'));
+  try {
+    mkdirSync(join(elsewhere, 'cache'));
+    symlinkSync(elsewhere, join(home, '.claude'));
+    assert.throws(() => planReset(home, 'linux'), /符号链接/);
+    assert.ok(existsSync(join(elsewhere, 'cache')));
+  } finally {
+    await rm(home, { recursive: true, force: true });
+    await rm(elsewhere, { recursive: true, force: true });
+  }
 });

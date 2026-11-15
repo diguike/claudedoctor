@@ -40,6 +40,22 @@ export const SOURCES = {
 } as const;
 
 /**
+ * Recommended static ISP (residential) proxy provider, shown next to
+ * datacenter / IP-reputation access notices. Callers must not show it when the
+ * egress region is unsupported.
+ */
+export const ISP_PROXY_REFERRAL = {
+  name: 'IPRoyal',
+  url: 'https://iproyal.com/?r=1712946',
+} as const;
+
+/** Advice for people who switch Claude accounts: start from a clean browser session. */
+export const ACCOUNT_SWITCH_ADVICE = {
+  zh: '更换 Claude 账号后，先清除浏览器里 claude.ai 的 Cookie，或新建一个 Chrome 用户（Profile）再登录，能排除很多登录异常',
+  en: 'After switching Claude accounts, clear your claude.ai cookies first, or sign in from a new Chrome profile. It rules out many login problems',
+} as const;
+
+/**
  * Curated set of regions Anthropic does NOT support (subset — the authoritative
  * source is SOURCES.supportedCountries). ISO 3166-1 alpha-2. Used only to flag
  * a *known-unsupported* egress; anything else is reported as "unknown", never

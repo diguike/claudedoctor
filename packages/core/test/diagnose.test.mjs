@@ -118,3 +118,26 @@ test('requires both date separators to be ASCII hyphens', () => {
   }));
   assert.equal(result.findings.find((finding) => finding.id === 'M0-date-stego')?.status, 'warn');
 });
+
+function datacenterNetwork(overrides = {}) {
+  return {
+    provider: 'ipapi.is', egressIp: '203.0.113.7', countryCode: 'SG', countryName: 'Singapore',
+    isSupportedRegion: true, asnType: 'datacenter', asnOrg: 'Example Hosting', isProxy: false, isTor: false,
+    isHosting: true, isMobile: false, threatLevel: null, selectedFamily: 'ipv4',
+    ...overrides,
+  };
+}
+
+test('recommends an ISP proxy for a datacenter egress', () => {
+  const dx = diagnose(input({ network: datacenterNetwork(), networkProbe: 'ok' }));
+  const note = dx.findings.find((f) => f.id === 'B4-datacenter')?.fix?.note ?? '';
+  assert.match(note, /https:\/\/iproyal\.com\/\?r=1712946/);
+});
+
+test('never offers the proxy referral when the egress region is unsupported', () => {
+  const dx = diagnose(input({
+    network: datacenterNetwork({ countryCode: 'CN', countryName: 'China', isSupportedRegion: false, isProxy: true }),
+    networkProbe: 'ok',
+  }));
+  for (const f of dx.findings) assert.doesNotMatch(f.fix?.note ?? '', /iproyal/i, f.id);
+});

@@ -3,7 +3,7 @@
  * A null return means "not applicable / nothing to say". Evidence and causal
  * labels come straight from docs/ban-signals.md. Nothing here does I/O.
  */
-import { SOURCES, regionSupport } from './catalog.js';
+import { ISP_PROXY_REFERRAL, SOURCES, regionSupport } from './catalog.js';
 import type { DoctorInput, Finding } from './types.js';
 
 type Detector = (input: DoctorInput) => Finding | null;
@@ -11,6 +11,18 @@ type Detector = (input: DoctorInput) => Finding | null;
 function networkSource(i: NonNullable<DoctorInput['network']>): string {
   const family = i.selectedFamily ? `/${i.selectedFamily}` : '';
   return `${i.provider}${family}${i.egressIp ? ` · ${i.egressIp}` : ''}`;
+}
+
+/**
+ * Referral hint for datacenter / flagged egress IPs. Suppressed when the region
+ * is unsupported: a proxy must never be presented as a way around region policy.
+ */
+function ispProxyHint(n: NonNullable<DoctorInput['network']>): string {
+  if (n.isSupportedRegion === false) return '';
+  return (
+    ` 推荐换成正规的静态住宅 ISP 代理，登录时通常更少被拦：` +
+    `${ISP_PROXY_REFERRAL.name} ${ISP_PROXY_REFERRAL.url}`
+  );
 }
 
 function familyBreakdown(i: NonNullable<DoctorInput['network']>): string {
@@ -787,7 +799,7 @@ const proxy: Detector = (i) => {
       kind: 'network',
       title: '换一个干净的住宅出口',
       commands: [],
-      note: '若你在用共享/公共 VPN 节点，换成干净住宅 IP 可降低登录被拦与被风控的概率。',
+      note: `若你在用共享/公共 VPN 节点，换成干净住宅 IP 可降低登录被拦与被风控的概率。${ispProxyHint(n)}`,
     },
   };
 };
@@ -812,7 +824,7 @@ const datacenter: Detector = (i) => {
       kind: 'network',
       title: '登录用住宅出口',
       commands: [],
-      note: '若 OAuth 登录卡在 Cloudflare 质询，换一个住宅网络出口再登录。',
+      note: `若 OAuth 登录卡在 Cloudflare 质询，换一个住宅网络出口再登录。${ispProxyHint(n)}`,
     },
   };
 };

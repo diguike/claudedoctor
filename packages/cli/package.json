@@ -1,6 +1,6 @@
 {
   "name": "@diguike/claudedoctor",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "Evidence-first diagnostics for Claude Code credentials, client source, network policy, and configuration hygiene.",
   "type": "module",
   "bin": {

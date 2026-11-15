@@ -5,6 +5,7 @@
  * stable regardless of emoji width; CJK cells are width-aware.
  */
 import pc from 'picocolors';
+import { ACCOUNT_SWITCH_ADVICE } from '@claudedoctor/core';
 import type { Diagnosis, Finding, FindingStatus, HealthLevel } from '@claudedoctor/core';
 
 /** Display width: CJK / fullwidth code points count as 2 columns. */
@@ -145,6 +146,7 @@ export function renderDiagnosis(dx: Diagnosis, opts: { why: boolean }): string {
   hints.push('--net 联网体检出口 IP');
   hints.push('fix 勾选并执行修复');
   out.push(pc.dim(`  提示: ${hints.join(' · ')}`));
+  out.push(pc.dim(`  换号: ${ACCOUNT_SWITCH_ADVICE.zh}。`));
   out.push(pc.dim('  边界: 通过体检只代表未发现已知高置信风险向量，不保证账号不会被封或受限。'));
   out.push(pc.dim('  判定说明: confirmed=官方证实 · reported=社区报告 · 因果=有服务端因果 · 访问/路径/环境提示不归入政策风险'));
   out.push('');

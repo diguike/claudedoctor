@@ -5,7 +5,7 @@
   <img src="https://raw.githubusercontent.com/diguike/claudedoctor/main/packages/web/public/og.png" alt="Claude Doctor" width="1200" />
 </picture>
 
-# Claude Doctor · 克劳德医生
+# Claude Doctor
 
 **Evidence-first diagnostics for Claude Code: check, fix, verify.**<br>
 **把政策风险、访问问题与环境信息分开判断，不把不确定性伪装成精确分数。**
@@ -80,7 +80,7 @@ Network and advisory findings that cannot be changed safely are shown as manual 
 - `check`, `fix`, and `env` are local by default.
 - Raw credentials are never printed, logged, or passed into `@claudedoctor/core`.
 - CLI network checks run only with `--net` and disclose the public egress IP to ipapi.is. If `IPDATA_API_KEY` is set, the in-process runtime-path probe may also use ipdata; the key is never placed in `curl` arguments.
-- The public Web UI automatically contacts ipify and ipapi.is to render its browser-side network check. It cannot see local credentials, Claude configuration, or the active terminal route.
+- The public Web UI automatically contacts ipify, ipdata (`ipdata.free`), and ipapi.is to render its browser-side network check. It cannot see local credentials, Claude configuration, or the active terminal route.
 - Failed observation is `WARN`/`UNKNOWN`, never a fabricated clean result or sample score.
 
 See the full [threat model and explicit non-goals](docs/threat-model.md).
@@ -125,6 +125,9 @@ bash scripts/reset-claude-cache.sh           # preview
 bash scripts/reset-claude-cache.sh --apply   # confirm, then move to backup
 ```
 
+The same reset is built into the CLI as `claudedoctor reset` (preview) and
+`claudedoctor reset --apply`.
+
 It deliberately preserves plugins, skills, hooks, settings, credentials, conversations, projects,
 tasks, history, file-history and backups. It never uses `sudo` or changes machine identity, Git
 configuration, shell profiles, Claude.app, or Desktop Application Support.
@@ -133,6 +136,13 @@ both planned and completed moves, so a partial run remains inspectable and recov
 
 See [`CLAUDE.md`](./CLAUDE.md) for the design rules, [`docs/mechanism.md`](./docs/mechanism.md)
 (byte-level forensics ledger) and [`docs/ban-signals.md`](./docs/ban-signals.md) (ban-signal evidence).
+
+## Clash setup skill
+
+[`skills/claude-isp-clash`](./skills/claude-isp-clash/SKILL.md) is an agent skill that builds and
+verifies a Clash Verge profile routing Claude's first-party domains through your own static ISP
+node while other traffic keeps its usual route. Copy the folder into `~/.claude/skills/` (or your
+agent's skills directory) and ask the agent to use it.
 
 ## Contributing and security
 
@@ -160,6 +170,8 @@ Claude Doctor 的核心不是“给中国用户打分”，而是把三件事拆
 bash scripts/reset-claude-cache.sh           # 预览
 bash scripts/reset-claude-cache.sh --apply   # 确认后移动到备份
 ```
+
+命令行里也有同样的功能：`claudedoctor reset`（预览）和 `claudedoctor reset --apply`。
 
 脚本明确保留 plugins、skills、hooks、配置、登录凭据、历史会话、projects、tasks、file-history
 和 backups；不会使用 `sudo`，也不会修改机器标识、Git、shell profile、Claude.app 或 Desktop

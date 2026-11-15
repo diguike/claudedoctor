@@ -1,4 +1,4 @@
-# 🩺 claudedoctor · 克劳德医生
+# claudedoctor
 
 > 给 Claude Code 做政策、访问与环境体检的命令行工具：**检测 → 修复 → 复验**。
 > 只碰有因果的信号，每条结论带置信度与出处，诊断都配可复检的修复。不是又一个吓唬人的分数。
@@ -21,6 +21,7 @@ claudedoctor check --net  # 联网体检出口 IP / 地区 / VPN / 代理 / 机�
 claudedoctor fix          # 开药：交互勾选并应用修复（--dry-run 只看 / --all 全应用 / --revert 撤销）
 claudedoctor verify       # 复诊：字节级复检 + 复跑体检
 claudedoctor env          # 打印脱敏环境快照
+claudedoctor reset        # 清理可重新生成的缓存（默认预览；--apply 才移到备份，不删除）
 ```
 
 退出码：`0` 健康 · `1` 需注意 · `2` 有确认风险。加 `--json` 输出机器可读结果。

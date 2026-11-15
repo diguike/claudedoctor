@@ -2,16 +2,21 @@
 
 All notable changes are documented here. The project follows semantic versioning for the published CLI.
 
-## Unreleased
+## 0.3.0 - 2026-11-15
 
 ### Added
 
+- `claudedoctor reset`: preview, then move an allowlist of regenerable Claude caches into a recoverable backup (same behaviour as `scripts/reset-claude-cache.sh`)
+- `skills/claude-isp-clash`: an agent skill for building and verifying a Clash Verge profile that routes Claude through a static ISP node
+- Web: a five-step setup checklist, a "bought an ISP proxy" guide entry, and links to the cache reset script, the skill, and Clash Verge
 - Regression tests for credential precedence, region policy, health summaries, date-line verification, CLI flags, and shell quoting
 - Production Web build with Core-generated region data and a confined preview server
 - Community health files, CI, and npm package-content auditing
 
 ### Changed
 
+- Web browser check now uses ipdata's keyless endpoint for region and operator, after ipapi.is dropped region codes and reputation flags from keyless responses; IP reputation links out to ipdata.co
+- Web browser check redesigned as a coloured status band with result tiles
 - Model current Claude Code authentication precedence, including cloud providers, `apiKeyHelper`, and the official `CLAUDE_CODE_OAUTH_TOKEN` flow
 - Recognize active native, Homebrew, WinGet, and npm Claude Code installations without claiming cryptographic integrity verification
 - Replace the partial unsupported-region deny-list with the official supported-region allow-list

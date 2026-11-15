@@ -11,6 +11,8 @@ import { probeNetwork, activeProviderName } from './probe.js';
 import { renderDiagnosis } from './render.js';
 import { verifyDateLine } from './verify.js';
 import { applyToProfile, blockLines, detectProfile, revertProfile, sessionScript } from './apply.js';
+import { homedir } from 'node:os';
+import { applyReset, isElevated, planReset, type ResetPlan } from './reset.js';
 
 const BANNER = pc.bold('🩺  Claude Doctor') + pc.dim(' (claudedoctor / cdoc)');
 const VERSION = (() => {
@@ -31,6 +33,7 @@ interface Flags {
   all: boolean;
   session: boolean;
   yes: boolean;
+  apply: boolean;
   help: boolean;
   version: boolean;
 }
@@ -45,6 +48,7 @@ export function parseFlags(args: string[]): { rest: string[]; flags: Flags; erro
     all: false,
     session: false,
     yes: false,
+    apply: false,
     help: false,
     version: false,
   };
@@ -59,6 +63,7 @@ export function parseFlags(args: string[]): { rest: string[]; flags: Flags; erro
     else if (a === '--all') flags.all = true;
     else if (a === '--session') flags.session = true;
     else if (a === '--yes' || a === '-y') flags.yes = true;
+    else if (a === '--apply') flags.apply = true;
     else if (a === '--help' || a === '-h') flags.help = true;
     else if (a === '--version' || a === '-v') flags.version = true;
     else if (a.startsWith('-')) error ??= `未知选项: ${a}`;
@@ -264,6 +269,69 @@ function cmdEnv(flags: Flags): number {
   return 0;
 }
 
+async function cmdReset(flags: Flags): Promise<number> {
+  if (isElevated()) {
+    process.stderr.write(pc.red('请用普通用户运行，不要加 sudo。\n'));
+    return 1;
+  }
+  let plan: ResetPlan;
+  try {
+    plan = planReset(homedir());
+  } catch (error) {
+    process.stderr.write(pc.red(`${error instanceof Error ? error.message : String(error)}\n`));
+    return 1;
+  }
+  if (flags.json && !flags.apply) {
+    process.stdout.write(JSON.stringify({ schemaVersion: 1, toolVersion: VERSION, mode: 'preview', targets: plan.targets }, null, 2) + '\n');
+    return 0;
+  }
+  if (!flags.json) {
+    process.stdout.write('\n' + BANNER + pc.bold(` · 清理缓存（${flags.apply ? '执行' : '预览'}）`) + '\n\n');
+    if (plan.targets.length === 0) {
+      process.stdout.write('   没有找到可清理的缓存。\n\n');
+      return 0;
+    }
+    process.stdout.write('   会被移走的缓存（可重新生成）：\n');
+    for (const rel of plan.targets) process.stdout.write(`     ~/${rel}\n`);
+    process.stdout.write(pc.dim('\n   不会动：登录凭证、配置、skills、plugins、hooks、会话历史、projects。\n'));
+    process.stdout.write(pc.dim('   执行前请先退出 Claude Code 和 Claude Desktop。\n\n'));
+  }
+  if (!flags.apply) {
+    process.stdout.write(`   这是预览，没有改动任何文件。要执行请运行 ${pc.green('claudedoctor reset --apply')}\n\n`);
+    return 0;
+  }
+  if (plan.targets.length === 0) {
+    if (flags.json) process.stdout.write(JSON.stringify({ schemaVersion: 1, toolVersion: VERSION, mode: 'apply', moved: [] }, null, 2) + '\n');
+    return 0;
+  }
+  if (!flags.yes) {
+    if (!process.stdin.isTTY) {
+      process.stderr.write(pc.red('需要在终端里确认；自动化场景请用 --apply --yes。\n'));
+      return 1;
+    }
+    const ok = await p.confirm({ message: '把这些缓存移到备份目录？', initialValue: false });
+    if (p.isCancel(ok) || !ok) {
+      process.stdout.write('   已取消，没有改动任何文件。\n\n');
+      return 0;
+    }
+  }
+  try {
+    const result = applyReset(plan);
+    if (flags.json) {
+      process.stdout.write(JSON.stringify({ schemaVersion: 1, toolVersion: VERSION, mode: 'apply', ...result }, null, 2) + '\n');
+      return 0;
+    }
+    process.stdout.write(`   ${pc.green('✓')} 已移走 ${result.moved.length} 项。\n`);
+    process.stdout.write(`   备份：${result.backupDir}\n`);
+    process.stdout.write(pc.dim('   确认 Claude 重启后一切正常，再删除这个备份。要恢复就把里面的文件移回原位。\n\n'));
+    return 0;
+  } catch (error) {
+    process.stderr.write(pc.red(`清理中途失败：${error instanceof Error ? error.message : String(error)}\n`));
+    process.stderr.write(pc.red(`已移走的文件都在 ${plan.home}/.claudedoctor-cleanup-backups/ 下，可查看其中的 manifest.tsv。\n`));
+    return 1;
+  }
+}
+
 function printHelp(): void {
   process.stdout.write(
     '\n' +
@@ -275,13 +343,15 @@ function printHelp(): void {
       '    claudedoctor [check]   体检本地 Claude Code（默认，表格输出）\n' +
       '    claudedoctor fix       开药：交互勾选并应用修复（--dry-run 只看 / --all 全应用 / --revert 撤销）\n' +
       '    claudedoctor verify    复诊：字节级复检日期行 + 复跑体检\n' +
-      '    claudedoctor env       打印脱敏环境快照\n\n' +
+      '    claudedoctor env       打印脱敏环境快照\n' +
+      '    claudedoctor reset     清理可重新生成的缓存（默认只预览；--apply 才移动到备份）\n\n' +
       pc.bold('  选项:\n') +
       '    --why      展开每条结论的出处与说明\n' +
       '    --net      联网体检出口 IP/地区（会把 IP 告知第三方）\n' +
       '    --json     机器可读输出\n' +
       '    --version  打印版本\n' +
-      '    fix --dry-run/--all/--session/--revert/--yes   修复的几种模式\n\n' +
+      '    fix --dry-run/--all/--session/--revert/--yes   修复的几种模式\n' +
+      '    reset --apply [--yes]   执行清理（文件移到 ~/.claudedoctor-cleanup-backups，不删除）\n\n' +
       pc.dim('  证据账本: docs/ban-signals.md · docs/mechanism.md\n\n'),
   );
 }
@@ -305,9 +375,17 @@ export async function main(argv: string[]): Promise<number> {
     return 64;
   }
   const cmd = rest[0] ?? 'check';
-  const fixOnly = flags.revert || flags.dryRun || flags.all || flags.session || flags.yes;
+  const fixOnly = flags.revert || flags.dryRun || flags.all || flags.session || (flags.yes && cmd !== 'reset');
   if (cmd !== 'fix' && fixOnly) {
     process.stderr.write(pc.red('选项 --revert/--dry-run/--all/--session/--yes 仅适用于 fix。\n'));
+    return 64;
+  }
+  if (flags.apply && cmd !== 'reset') {
+    process.stderr.write(pc.red('选项 --apply 仅适用于 reset。\n'));
+    return 64;
+  }
+  if (cmd === 'reset' && flags.yes && !flags.apply) {
+    process.stderr.write(pc.red('reset 的 --yes 需要和 --apply 一起使用。\n'));
     return 64;
   }
   if (cmd === 'fix' && [flags.revert, flags.dryRun, flags.all, flags.session].filter(Boolean).length > 1) {
@@ -323,6 +401,8 @@ export async function main(argv: string[]): Promise<number> {
       return cmdVerify(flags);
     case 'env':
       return cmdEnv(flags);
+    case 'reset':
+      return cmdReset(flags);
     case 'help':
     case '--help':
     case '-h':

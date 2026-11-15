@@ -26,7 +26,7 @@ createServer(async (req, res) => {
     const body = await readFile(path);
     res.writeHead(200, {
       'content-type': TYPES[extname(path)] || 'application/octet-stream',
-      'content-security-policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src https://api.ipify.org https://api6.ipify.org https://api.ipapi.is; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+      'content-security-policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src https://api.ipify.org https://api6.ipify.org https://api.ipapi.is https://ipdata.free; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
       'referrer-policy': 'no-referrer',
       'x-content-type-options': 'nosniff',
       'x-frame-options': 'DENY',
